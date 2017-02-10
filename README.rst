@@ -18,6 +18,11 @@ Requirements:
   $ pip install -r requirements.txt
 
 
+Matplotlib build instructions are available here_.
+
+.. here_: http://matplotlib.org/users/installing.html#build-requirements
+
+
 
 Usage
 =====
