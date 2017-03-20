@@ -129,7 +129,13 @@ def local_context(**kwargs):
 
 labels = ['debug', 'info', 'warning', 'error', 'off']
 for i, l in enumerate(labels):
-    globals()[l] = log_level(i)(line)
+    if l != 'off':
+        globals()[l] = log_level(i)(line)
+    else:
+        def null():
+            pass
+        globals()[l] = null
+    
     globals()[l + '_enable'] = log_enable(i)
 
 
