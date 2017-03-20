@@ -16,6 +16,10 @@ wf_min, wf_max = 10, 112
 we_range = list(range(we_min, we_max + 1))
 wf_range = list(range(wf_min, wf_max + 1))
 
+# debug
+# we_range = [we_min, we_max]
+# wf_range = [wf_min, wf_max]
+
 directory = 'soap/semantics/'
 default_file = directory + 'area.pkl'
 template_file = directory + 'template.vhdl'
@@ -54,19 +58,23 @@ def flopoco(op, we, wf, f=None, dir=None):
     from soap.expr import ADD_OP, MULTIPLY_OP
     flopoco_cmd = []
     flopoco_cmd += ['-target=' + device_name]
-    dir = dir or tempfile.mktemp(suffix='/')
+    dir = dir or tempfile.mkdtemp(prefix='soap_', suffix='/')
+    logger.debug(dir)
     with cd(dir):
         if f is None:
-            f = tempfile.mktemp(suffix='.vhdl', dir=dir)
+            _, f = tempfile.mkstemp(suffix='.vhdl', dir=dir)
+            logger.debug(type(f), f)
         flopoco_cmd += ['-outputfile=%s' % f]
         if op == 'add' or op == ADD_OP:
             flopoco_cmd += ['FPAdder', we, wf]
         elif op == 'mul' or op == MULTIPLY_OP:
             flopoco_cmd += ['FPMultiplier', we, wf, wf]
+        elif op == 'add3':
+            flopoco_cmd += ['FPAdder3Input', we, wf]
         else:
             raise ValueError('Unrecognised operator %s' % str(op))
         logger.debug('Flopoco', flopoco_cmd)
-        sh.flopoco(*flopoco_cmd)
+        logger.debug(sh.flopoco(*flopoco_cmd, _err_to_out=False))
         try:
             with open(f) as fh:
                 if not fh.read():
@@ -85,7 +93,7 @@ def xilinx(f, dir=None):
     cmd = ['run', '-p', device_model]
     cmd += ['-ifn', f, '-ifmt', 'VHDL']
     cmd += ['-ofn', g, '-ofmt', 'NGC']
-    dir = dir or tempfile.mktemp(suffix='/')
+    dir = dir or tempfile.mkdtemp(prefix='soap_', suffix='/')
     with cd(dir):
         logger.debug('Xilinx', repr(cmd))
         sh.xst(sh.echo(*cmd), _out='out.log', _err='err.log')
@@ -101,9 +109,8 @@ def eval_operator(op, we, wf, f=None, dir=None):
 def _para_synth(op_we_wf):
     import sh
     op, we, wf = op_we_wf
-    work_dir = 'syn_%d' % os.getpid()
     try:
-        item = eval_operator(op, we, wf, f=None, dir=work_dir)
+        item = eval_operator(op, we, wf, f=None, dir=None)
         logger.info('Processed', item)
         return item
     except sh.ErrorReturnCode:
@@ -124,7 +131,8 @@ def pool():
 @timeit
 def batch_synth(we_range, wf_range):
     import itertools
-    args = itertools.product(['add', 'mul'], we_range, wf_range)
+    ops = ['add', 'mul', 'add3'][2:]
+    args = itertools.product(ops, we_range, wf_range)
     return list(pool().imap_unordered(_para_synth, args))
 
 
@@ -201,9 +209,9 @@ class CodeGenerator(object):
         self.var_env = var_env
         self.wf = prec
         self.we = self.expr.exponent_width(var_env, prec)
-        self.dir = dir or tempfile.mktemp(suffix='/')
+        self.dir = dir or tempfile.mkdtemp(prefix='soap_', suffix='/')
         with cd(self.dir):
-            self.f = file_name or tempfile.mktemp(suffix='.vhdl', dir=dir)
+            self.f = file_name or tempfile.mkstemp(suffix='.vhdl', dir=dir)[1]
 
     def generate(self):
         from akpytemp import Template
@@ -273,7 +281,7 @@ class CodeGenerator(object):
 
 def eval_expr(expr, var_env, prec):
     import sh
-    dir = tempfile.mktemp(suffix='/')
+    dir = tempfile.mkdtemp(prefix='soap_', suffix='/')
     f = CodeGenerator(expr, var_env, prec, dir=dir).generate()
     logger.debug('Synthesising', str(expr), 'with precision', prec, 'in', f)
     try:
@@ -287,13 +295,13 @@ def eval_expr(expr, var_env, prec):
 if __name__ == '__main__':
     import sys
     from soap.expr import Expr
-    logger.set_context(level=logger.levels.info)
+    logger.set_context(level=logger.levels.debug)
     if 'synth' in sys.argv:
-        save(default_file, batch_synth(we_range, wf_range))
+        save(directory + 'area.add3.pkl', batch_synth(we_range, wf_range))
     else:
         p = 23
         e = Expr('a + b + c')
         v = {'a': ['0', '1'], 'b': ['0', '100'], 'c': ['0', '100000']}
         logger.info(e.area(v, p).area)
         logger.info(e.real_area(v, p))
-        plot(load(default_file))
+        plot(load(directory + 'area.add3.pkl'))
