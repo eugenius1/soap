@@ -6,10 +6,11 @@ import gmpy2
 
 from soap.common import Comparable, Flyweight, cached, ignored
 from soap.expr.common import (
-    ADD_OP, MULTIPLY_OP, BARRIER_OP, COMMUTATIVITY_OPERATORS
+    ADD_OP, MULTIPLY_OP, BARRIER_OP, COMMUTATIVITY_OPERATORS,
+    ADD3_OP
 )
 from soap.expr.parser import parse
-
+import soap.logger as logger
 
 class Expr(Comparable, Flyweight):
     """The expression class."""
@@ -22,29 +23,56 @@ class Expr(Comparable, Flyweight):
 
             1. ``Expr('+', a, b)``
             2. ``Expr(op='+', a1=a, a2=b)``
-            3. ``Expr('+', al=(a, b))``
+            3. ``Expr('+', operands=(a, b))``
         """
+        if not args and not kwargs:
+            logger.error('class Expr: no `args`')
+            logger.error('  kwargs={}'.format(kwargs))
+
         if kwargs:
+            # Accept `operands` or `al`, in that order of preference
+            if 'al' in kwargs and 'operands' not in kwargs:
+                kwargs['operands'] = kwargs['al']
             op = kwargs.setdefault('op')
-            a1 = kwargs.setdefault('a1')
-            a2 = kwargs.setdefault('a2')
-            al = a1, a2
-        if len(args) == 1:
+            operands = kwargs.setdefault('operands')
+            if not operands:
+                a1 = kwargs.setdefault('a1')
+                a2 = kwargs.setdefault('a2')
+                operands = a1, a2
+        # Expr(obj), with obj.op and obj.args available
+        elif len(args) == 1:
             expr = list(args).pop()
             try:
-                op, al = expr.op, expr.args
+                op, operands = expr.op, expr.args
             except AttributeError:
                 expr = parse(expr, self.__class__)
             try:
-                op, al = expr.op, expr.args
+                op, operands = expr.op, expr.args
             except AttributeError:
                 raise ValueError('String is not an expression')
+        # Expr(op, a1) or Expr(op, [a1, a2, a3,...])
         elif len(args) == 2:
-            op, al = args
-        elif len(args) == 3:
-            op, *al = args
+            op, operands = args
+            if not isinstance(operands, (list, tuple)):
+                # put number into tuple
+                operands = (operands,)
+            else:
+                logger.debug('class Expr: args[1]={} of type {}'.format(args[1], type(args[1])))
+        # Expr(op, a1, a2, a3,...)
+        else: # len(args) > 2:
+            op, *operands = args
+        operands = tuple(operands)
+        # def clean_if_str(obj):
+        #     if isinstance(obj, str):
+        #         return CleanString(obj)
+        #     else:
+        #         return obj
+        # operands = tuple(map(clean_if_str, operands))
         self.op = op
-        self.a1, self.a2 = al
+        self.operands = operands
+        # legacy: self.a1, .a2, .a3, ...
+        for index, a in enumerate(operands):
+            setattr(self, 'a{}'.format(index + 1), a)
         super().__init__()
 
     def __getnewargs__(self):
@@ -82,19 +110,21 @@ class Expr(Comparable, Flyweight):
                 with ignored(AttributeError):
                     return a.error(var_env, prec)
                 with ignored(TypeError, KeyError):
-                    return eval(var_env[a])
+                    return eval(var_env[str(a)])
                 with ignored(TypeError):
                     return cast_error(*a)
                 with ignored(TypeError):
                     return cast_error_constant(a)
                 return a
-            e1, e2 = eval(self.a1), eval(self.a2)
+            #e1, e2 = eval(self.a1), eval(self.a2)
+            errors = tuple(eval(o) for o in self.operands)
             if self.op == ADD_OP:
-                return e1 + e2
+                return errors[0] + errors[1]
             if self.op == MULTIPLY_OP:
-                return e1 * e2
+                return errors[0] * errors[1]
             if self.op == BARRIER_OP:
-                return e1 | e2
+                return errors[0] | errors[1]
+            return errors[0].do_op(self.op, errors[1:])
 
     def exponent_width(self, var_env, prec):
         """Computes the exponent width required for its evaluation so that no
@@ -217,13 +247,43 @@ class Expr(Comparable, Flyweight):
 
     def __str__(self):
         a1, a2 = sorted([str(self.a1), str(self.a2)])
-        return '(%s %s %s)' % (a1, self.op, a2)
+        if self.op != ADD3_OP: # TODO primitive:
+            return '(%s %s %s)' % (a1, self.op, a2)
+        else:
+            # eg. "add3(a, b, c)" or "op()"
+            if len(self.operands) == 0:
+                params = ''
+            else:
+                params = str(self.operands[0])
+                for x in self.operands[1:]:
+                    params += ', {}'.format(x)
+            return '{op}({params})'.format(op=self.op, params=params)
 
-    def __repr__(self):
-        return self.__str__()
-        return "Expr(op='%s', a1=%s, a2=%s)" % \
-            (self.op, repr(self.a1), repr(self.a2))
+    def __repr__(self, mode=0):
+        if mode == 1:
+            return "Expr(op='%s', a1=%s, a2=%s)" % \
+                (self.op, repr(self.a1), repr(self.a2))
+        else:
+            return self.__str__()
 
+    def do_op(self, op, others=[], **kwargs):
+        """Custom operator on Expr
+        No need to duplicate self in others.
+        """
+        # Natural operators
+        if op == ADD_OP:
+            return self + others[0]
+        elif op == SUBTRACT_OP:
+            return self - others[0]
+        elif op == MULTIPLY_OP:
+            return self * others[0]
+        elif op == BARRIER_OP:
+            return self | others[0]
+        
+        # Custom operators
+        if op == ADD3_OP:
+            return Expr(op=ADD3_OP, operands=[self]+others[:2]) 
+            
     def __add__(self, other):
         return Expr(op=ADD_OP, a1=self, a2=other)
 
@@ -263,6 +323,21 @@ class Expr(Comparable, Flyweight):
         return self._hash
 
 
+class CleanString(object):
+    """Custom string class for variable names.
+    Doesn't print quotation marks at string boundaries.
+    eg. tuple "(a, b, c)" instead of "('a', 'b', 'c')"
+    """
+    def __init__(self, string, *args, **kwargs):
+        self.value = str(string, *args, **kwargs)
+    def __repr__(self):
+        return str(self.value)
+    def __hash__(self):
+        return hash(self.value)
+
+CleanStr = CleanString
+
+
 class BExpr(Expr):
     """An expression class that only allows non-expression arguments.
 
@@ -279,6 +354,7 @@ class BExpr(Expr):
 
 
 if __name__ == '__main__':
+    logger.set_context(level=logger.levels.debug)
     r = Expr("""(a + a + b) * (a + b + b) * (b + b + c) *
                 (b + c + c) * (c + c + a) * (c + a + a)""")
     n, e = r.crop(1)
@@ -297,4 +373,4 @@ if __name__ == '__main__':
     for l, e in r.as_labels()[1].items():
         print(str(l), ':', str(e))
     print(r.area(v, prec))
-    print(r.real_area(v, prec))
+    # print(r.real_area(v, prec))

@@ -55,8 +55,11 @@ class AreaSemantics(Comparable, Lattice):
         return mult, add
 
     def _area(self):
+        if self.e.op == soap.expr.ADD3_OP:
+            return 1377
         wf = self.p
         we = self.e.exponent_width(self.v, wf)
+        # logger.debug('we={}, wf={}'.format(we, wf))
         mult, add = self._op_counts()
         return flopoco.adder(we, wf) * add + flopoco.multiplier(we, wf) * mult
 

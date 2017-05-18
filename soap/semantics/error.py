@@ -7,7 +7,13 @@ from gmpy2 import mpfr, mpq as _mpq
 
 from soap.common import Comparable
 from soap.semantics import Lattice
-
+# from soap.expr.common import (
+#     ADD3_OP
+# )
+ADD_OP = '+'
+SUBTRACT_OP = '-'
+MULTIPLY_OP = '*'
+ADD3_OP = 'add3'
 
 mpfr_type = type(mpfr('1.0'))
 mpq_type = type(_mpq('1.0'))
@@ -134,6 +140,28 @@ class ErrorSemantics(Lattice, Comparable):
     def meet(self, other):
         return ErrorSemantics(self.v & other.v, self.e & other.e)
 
+    def do_op(self, op, others=[], **kwargs):
+        """Custom operator on ErrorSemantics
+        No need to duplicate self in others.
+        """
+        # Natural operators
+        if op == ADD_OP:
+            return self + others[0]
+        elif op == SUBTRACT_OP:
+            return self - others[0]
+        elif op == MULTIPLY_OP:
+            return self * others[0]
+        
+        # Custom operators
+        v = self.v
+        e = self.e
+        if op == ADD3_OP:
+            for operand in others[:2]:
+                v += operand.v
+                e += operand.e
+            e += round_off_error(v)
+        return ErrorSemantics(v, e)
+
     def __add__(self, other):
         v = self.v + other.v
         e = self.e + other.e + round_off_error(v)
@@ -178,19 +206,23 @@ if __name__ == '__main__':
     with precision_context(52):
         x = cast_error('0.1', '0.2')
         print(x)
-        print(x * x)
+        # print(x * x)
+        print(x + x + x)
+        print(x.do_op(ADD3_OP, [x, x]))
     with precision_context(23):
         a = cast_error('5', '10')
         b = cast_error('0', '0.001')
-        print((a + b) * (a + b))
-    gmpy2.set_context(gmpy2.ieee(64))
-    print(FloatInterval(['0.1', '0.2']) * FloatInterval(['5.3', '6.7']))
-    print(float(ulp(mpfr('0.1'))))
-    mult = lambda x, y: x * y
-    args = [mpfr('0.3'), mpfr('2.6')]
-    a = FloatInterval(['0.3', '0.3'])
-    print(a, round_off_error(a))
-    x = cast_error('0.9', '1.1')
-    for i in range(20):
-        x *= x
-        print(i, x)
+        # print((a + b) * (a + b))
+        print(a + b + b)
+        print(a.do_op(ADD3_OP, [b, b]))
+    # gmpy2.set_context(gmpy2.ieee(64))
+    # print(FloatInterval(['0.1', '0.2']) * FloatInterval(['5.3', '6.7']))
+    # print(float(ulp(mpfr('0.1'))))
+    # mult = lambda x, y: x * y
+    # args = [mpfr('0.3'), mpfr('2.6')]
+    # a = FloatInterval(['0.3', '0.3'])
+    # print(a, round_off_error(a))
+    # x = cast_error('0.9', '1.1')
+    # for i in range(20):
+    #     x *= x
+    #     print(i, x)

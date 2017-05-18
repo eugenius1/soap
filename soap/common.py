@@ -69,22 +69,28 @@ def ignored(*exceptions):
 
 
 @contextmanager
-def profiled():
-    import pycallgraph
+def profiled(name=''):
+    from pycallgraph import PyCallGraph
+    from pycallgraph.output import GraphvizOutput
     from pympler.classtracker import ClassTracker
     from pympler.asizeof import asizeof
-    from soap.common import Flyweight, _cache_map
+    from soap.common import Flyweight #, _cache_map
     from soap.expr import Expr
-    pycallgraph.start_trace()
     tracker = ClassTracker()
     tracker.track_object(Flyweight._cache)
     tracker.track_class(Expr)
-    yield
+    graphviz = GraphvizOutput()
+    pcg_output_file = 'pycallgraph'
+    if name:
+        pcg_output_file += '_' + name
+    pcg_output_file += '.png'
+    graphviz.output_file = pcg_output_file
+    with PyCallGraph(output=graphviz):
+        yield
     tracker.create_snapshot()
     tracker.stats.print_summary()
     print('Flyweight cache size', asizeof(Flyweight._cache))
-    print('Global cache size', asizeof(_cache_map))
-    pycallgraph.make_dot_graph('profile.png')
+    print('Global cache size', '[asizeof(_cache_map) = ??, `_cache_map` not found]')
 
 
 _cached_funcs = []

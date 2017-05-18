@@ -46,7 +46,7 @@ def cd(d):
 def get_luts(file_name):
     from bs4 import BeautifulSoup
     with open(file_name, 'r') as f:
-        f = BeautifulSoup(f.read())
+        f = BeautifulSoup(f.read(), "lxml")
         app = f.document.application
         util = app.find('section', stringid='XST_DEVICE_UTILIZATION_SUMMARY')
         luts = util.find('item', stringid='XST_NUMBER_OF_SLICE_LUTS')

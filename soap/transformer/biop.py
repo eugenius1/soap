@@ -8,6 +8,7 @@ import random
 import soap.logger as logger
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, ASSOCIATIVITY_OPERATORS,
+    ADD3_OP,
     LEFT_DISTRIBUTIVITY_OPERATORS, LEFT_DISTRIBUTIVITY_OPERATOR_PAIRS,
     RIGHT_DISTRIBUTIVITY_OPERATORS, RIGHT_DISTRIBUTIVITY_OPERATOR_PAIRS,
     is_expr
@@ -39,8 +40,10 @@ def associativity(t):
     if not t.op in ASSOCIATIVITY_OPERATORS:
         return
     s = []
+    # (a + b) + c == a + (b + c)
     if is_expr(t.a1) and t.a1.op == t.op:
         s.extend(list(expr_from_args(t.a1.args + [t.a2])))
+    # a + (b + c) == (a + b) + c
     if is_expr(t.a2) and t.a2.op == t.op:
         s.extend(list(expr_from_args(t.a2.args + [t.a1])))
     return s
@@ -58,11 +61,13 @@ def distribute_for_distributivity(t):
         the input tree.
     """
     s = []
+    # a * (b + c) == (a * b) + (a * c)
     if t.op in LEFT_DISTRIBUTIVITY_OPERATORS and is_expr(t.a2):
         if (t.op, t.a2.op) in LEFT_DISTRIBUTIVITY_OPERATOR_PAIRS:
             s.append(Expr(t.a2.op,
                           Expr(t.op, t.a1, t.a2.a1),
                           Expr(t.op, t.a1, t.a2.a2)))
+    # (a + b) * c == (a * c) + (b * c)
     if t.op in RIGHT_DISTRIBUTIVITY_OPERATORS and is_expr(t.a1):
         if (t.op, t.a1.op) in RIGHT_DISTRIBUTIVITY_OPERATOR_PAIRS:
             s.append(Expr(t.a1.op,
@@ -70,6 +75,19 @@ def distribute_for_distributivity(t):
                           Expr(t.op, t.a1.a2, t.a2)))
     return s
 
+
+@none_to_list
+def two_add2_to_one_add3(t):
+    if t.op != ADD_OP:
+        return
+    s = []
+    # (a + b) + c == add3(a, b, c)
+    if is_expr(t.a1) and t.a1.op == ADD_OP:
+        s.extend([Expr(ADD3_OP, *t.a1.operands, t.a2)])
+    # a + (b + c) == add3(a, b, c)
+    if is_expr(t.a2) and t.a2.op == ADD_OP:
+        s.extend([Expr(ADD3_OP, t.a1, *t.a2.operands)])
+    return s
 
 @none_to_list
 def collect_for_distributivity(t):
@@ -227,19 +245,36 @@ class BiOpTreeTransformer(TreeTransformer):
                 'Transformed: %s %s' % (to, t, no, tn))
 
 
+class FusedBiOpTreeTransformer(BiOpTreeTransformer):
+    """The class that adds transformation to and from fused unit expressions.
+
+    It has the same arguments as :class:`soap.transformer.BiOpTreeTransformer`,
+    which is the class it is derived from."""
+    transform_methods = [associativity,
+                         distribute_for_distributivity,
+                         collect_for_distributivity,
+                         two_add2_to_one_add3]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 if __name__ == '__main__':
     from soap.common import profiled, timed
     Expr.__repr__ = Expr.__str__
     logger.set_context(level=logger.levels.info)
-    e = '(a + 1) * b | (b + 1) * a | a * b'
+    # e = '(a + 1) * b | (b + 1) * a | a * b'
+    e = '(a + b) + c'
+    v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
     t = Expr(e)
     logger.info('Expr:', str(t))
     logger.info('Tree:', t.tree())
-    with profiled(), timed():
-        s = BiOpTreeTransformer(t).closure()
-    logger.info('Transformed:', len(s))
     from soap.analysis.utils import plot, analyse
-    v = {'a': ['1', '2'], 'b': ['100', '200']}
-    a = analyse(s, v)
-    logger.info(a)
-    plot(a)
+    # with profiled(), timed():
+    for Transformer in (BiOpTreeTransformer, FusedBiOpTreeTransformer):
+        with timed():
+            s = Transformer(t).closure()
+        logger.info('Transformed:', len(s))
+        a = analyse(s, v)
+        logger.info(a)
+        plot(a)

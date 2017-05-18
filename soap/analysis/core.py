@@ -171,15 +171,28 @@ if __name__ == '__main__':
     from soap.transformer import BiOpTreeTransformer
     from soap.analysis.utils import plot
     from soap.common import timed
+    import copy
+    from soap.expr.biop import CleanStr
     logger.set_context(level=logger.levels.info)
-    e = Expr('(a + b) * (a + b)')
+    # e = Expr('(a + b) * (a + b)')
+    e = Expr('((a + b) + b)')
+    e2 = e
+    e2 = copy.deepcopy(e)
+    e2.op = 'add3'
+    e2.operands = ('a','b','b')
+    print(e2)
     v = {
         'a': ['5', '10'],
         'b': ['0', '0.001'],
+        'c': ['0', '0.000001'],
     }
-    with timed('Analysis'):
-        a = VaryWidthAnalysis(BiOpTreeTransformer(e).closure(), v)
-        a, f = a.analyse(), a.frontier()
+    print(e2.error(v,22))
+    print(e.error(v,22))
+    # with timed('Analysis'):
+    a = VaryWidthAnalysis(set([e2]), v)
+    a, f = a.analyse(), a.frontier()
     logger.info('Results', len(a))
+    logger.info(a[0])
     logger.info('Frontier', len(f))
+    logger.info(f[0])
     plot(a)
