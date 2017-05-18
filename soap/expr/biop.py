@@ -62,12 +62,6 @@ class Expr(Comparable, Flyweight):
         else: # len(args) > 2:
             op, *operands = args
         operands = tuple(operands)
-        # def clean_if_str(obj):
-        #     if isinstance(obj, str):
-        #         return CleanString(obj)
-        #     else:
-        #         return obj
-        # operands = tuple(map(clean_if_str, operands))
         self.op = op
         self.operands = operands
         # legacy: self.a1, .a2, .a3, ...
@@ -321,21 +315,6 @@ class Expr(Comparable, Flyweight):
             pass
         self._hash = hash(self._symmetric_id())
         return self._hash
-
-
-class CleanString(object):
-    """Custom string class for variable names.
-    Doesn't print quotation marks at string boundaries.
-    eg. tuple "(a, b, c)" instead of "('a', 'b', 'c')"
-    """
-    def __init__(self, string, *args, **kwargs):
-        self.value = str(string, *args, **kwargs)
-    def __repr__(self):
-        return str(self.value)
-    def __hash__(self):
-        return hash(self.value)
-
-CleanStr = CleanString
 
 
 class BExpr(Expr):

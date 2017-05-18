@@ -172,7 +172,6 @@ if __name__ == '__main__':
     from soap.analysis.utils import plot
     from soap.common import timed
     import copy
-    from soap.expr.biop import CleanStr
     logger.set_context(level=logger.levels.info)
     # e = Expr('(a + b) * (a + b)')
     e = Expr('((a + b) + b)')
