@@ -43,25 +43,28 @@ class AreaSemantics(Comparable, Lattice):
         pass
 
     def _op_counts(self):
-        mult, add = 0, 0
+        # key is op, and value is its count
+        counts = {}
         for _, e in self.s.items():
             try:
-                if e.op == soap.expr.MULTIPLY_OP:
-                    mult += 1
-                if e.op == soap.expr.ADD_OP:
-                    add += 1
+                op = e.op
+                if op in counts:
+                    counts[op] += 1
+                else:
+                    counts[op] = 1
             except AttributeError:
                 pass
-        return mult, add
+        return counts
 
     def _area(self):
-        if self.e.op == soap.expr.ADD3_OP:
-            return 1377
         wf = self.p
         we = self.e.exponent_width(self.v, wf)
         # logger.debug('we={}, wf={}'.format(we, wf))
-        mult, add = self._op_counts()
-        return flopoco.adder(we, wf) * add + flopoco.multiplier(we, wf) * mult
+        op_counts = self._op_counts()
+        luts = 0
+        for op in op_counts:
+            luts += op_counts[op] * flopoco.luts_for_op(op, we=we, wf=wf)
+        return luts
 
     def __add__(self, other):
         return AreaSemantics(self.e + other.e, self.v)

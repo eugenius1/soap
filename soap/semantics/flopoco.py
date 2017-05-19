@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 from soap.common import cached, timeit
 import soap.logger as logger
+from soap.expr import ADD_OP, MULTIPLY_OP, ADD3_OP
 
 
 class FlopocoMissingImplementationError(Exception):
@@ -164,16 +165,20 @@ def plot(results):
     plt.show()
 
 
-_add = {}
-_mul = {}
+
+_op_luts = {ADD_OP: {}, MULTIPLY_OP: {}, ADD3_OP: {}}
 if os.path.isfile(default_file):
     for i in load(default_file):
         xv, yv, zv = int(i['we']), int(i['wf']), int(i['value'])
         if i['op'] == 'add':
-            _add[xv, yv] = zv
+            _op_luts[ADD_OP][xv, yv] = zv
         elif i['op'] == 'mul':
-            _mul[xv, yv] = zv
+            _op_luts[MULTIPLY_OP][xv, yv] = zv
+        elif i['op'] == 'add3':
+            _op_luts[ADD3_OP][xv, yv] = zv
 
+_add = _op_luts[ADD_OP]
+_mul = _op_luts[MULTIPLY_OP]
 
 def _impl(_dict, we, wf):
     try:
@@ -194,6 +199,13 @@ def adder(we, wf):
 
 def multiplier(we, wf):
     return _impl(_mul, we, wf)
+
+
+def luts_for_op(op, we, wf):
+    if op == ADD3_OP:
+        return 1377
+    assert op in _op_luts
+    return _impl(_op_luts[op], we, wf)
 
 
 @cached
