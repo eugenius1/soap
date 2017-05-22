@@ -44,10 +44,13 @@ class AreaSemantics(Comparable, Lattice):
 
     def _op_counts(self):
         # key is op, and value is its count
+        from soap.expr.common import OPERATORS_WITH_AREA_INFO
         counts = {}
         for _, e in self.s.items():
             try:
                 op = e.op
+                if op not in OPERATORS_WITH_AREA_INFO:
+                    continue
                 if op in counts:
                     counts[op] += 1
                 else:

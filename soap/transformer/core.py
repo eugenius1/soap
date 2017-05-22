@@ -231,9 +231,9 @@ def _walk_r(t, f, v, d):
         return s
     for e in f(t):
         s.add(e)
-    for a, b in (t.args, t.args[::-1]):
+    for index, a in enumerate(t.args):
         for e in _walk_r(a, f, v, d - 1):
-            s.add(Expr(t.op, e, b))
+            s.add(Expr(t.op, [e]+t.args[:index]+t.args[index+1:]))
     if not v:
         return s
     try:

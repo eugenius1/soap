@@ -25,6 +25,7 @@ class Expr(Comparable, Flyweight):
             2. ``Expr(op='+', a1=a, a2=b)``
             3. ``Expr('+', operands=(a, b))``
         """
+        logger.debug('Expr(*{}, **{})'.format(args, kwargs))
         if not args and not kwargs:
             logger.error('class Expr: no `args`')
             logger.error('  kwargs={}'.format(kwargs))
@@ -34,11 +35,15 @@ class Expr(Comparable, Flyweight):
             if 'al' in kwargs and 'operands' not in kwargs:
                 kwargs['operands'] = kwargs['al']
             op = kwargs.setdefault('op')
+            if op == None and len(args) > 0:
+                # Expr(op_, operands=operands_), ie. one positional and some keyword arguments
+                op = args[0]
             operands = kwargs.setdefault('operands')
-            if not operands:
+            if operands == None:
+                # Set legacy members to None, if no operands nor a1 and a2
                 a1 = kwargs.setdefault('a1')
                 a2 = kwargs.setdefault('a2')
-                operands = a1, a2
+                operands = (a1, a2)
         # Expr(obj), with obj.op and obj.args available
         elif len(args) == 1:
             expr = list(args).pop()
@@ -61,7 +66,9 @@ class Expr(Comparable, Flyweight):
         # Expr(op, a1, a2, a3,...)
         else: # len(args) > 2:
             op, *operands = args
-        operands = tuple(operands)
+        operands = list(operands)
+        if op == None:
+            logger.error('Expr(*{}, **{}), setting op=None'.format(args, kwargs))
         self.op = op
         self.operands = operands
         # legacy: self.a1, .a2, .a3, ...
@@ -70,7 +77,7 @@ class Expr(Comparable, Flyweight):
         super().__init__()
 
     def __getnewargs__(self):
-        return self.op, self.a1, self.a2
+        return (self.op, *(self.operands))
 
     def tree(self):
         """Produces a tuple tree for the expression."""
@@ -78,12 +85,12 @@ class Expr(Comparable, Flyweight):
             if isinstance(a, Expr):
                 return a.tree()
             return a
-        return (self.op, to_tuple(self.a1), to_tuple(self.a2))
+        return (self.op, *tuple([to_tuple(arg) for arg in self.operands]))
 
     @property
     def args(self):
         """Returns the arguments of the expression"""
-        return [self.a1, self.a2]
+        return self.operands
 
     @cached
     def error(self, var_env, prec):
@@ -111,7 +118,7 @@ class Expr(Comparable, Flyweight):
                     return cast_error_constant(a)
                 return a
             #e1, e2 = eval(self.a1), eval(self.a2)
-            errors = tuple(eval(o) for o in self.operands)
+            errors = tuple(eval(o) for o in self.args)
             if self.op == ADD_OP:
                 return errors[0] + errors[1]
             if self.op == MULTIPLY_OP:
@@ -186,13 +193,17 @@ class Expr(Comparable, Flyweight):
                 l = Label(e)
                 return l, {l: e}
 
-        l1, s1 = to_label(self.a1)
-        l2, s2 = to_label(self.a2)
-        e = BExpr(op=self.op, a1=l1, a2=l2)
+        labels, mappings = [], []
+        for arg in self.operands:
+            l, s = to_label(arg)
+            labels.append(l)
+            mappings.append(s)
+        
+        e = BExpr(op=self.op, operands=labels)
         l = Label(e)
         s = {l: e}
-        s.update(s1)
-        s.update(s2)
+        for mapping in mappings:
+            s.update(mapping)
         return l, s
 
     def crop(self, depth):
@@ -209,10 +220,15 @@ class Expr(Comparable, Flyweight):
             except AttributeError:
                 return a, {}
         if depth > 0:
-            l1, s1 = subcrop(self.a1)
-            l2, s2 = subcrop(self.a2)
-            s1.update(s2)
-            return self.__class__(self.op, l1, l2), s1
+            labels, mappings = [], []
+            for arg in self.operands:
+                l, s = subcrop(arg)
+                labels.append(l)
+                mappings.append(s)
+            s = mappings[0]
+            for mapping in mappings[1:]:
+                s.update(mapping)
+            return self.__class__(self.op, operands=labels), s
         from soap.semantics import Label
         l = Label(self)
         return l, {l: self}
@@ -234,10 +250,10 @@ class Expr(Comparable, Flyweight):
                 return env[a]
             except KeyError:
                 return a
-        return self.__class__(self.op, substitch(self.a1), substitch(self.a2))
+        return self.__class__(self.op, *tuple([substitch(arg) for arg in self.operands]))
 
     def __iter__(self):
-        return iter((self.op, self.a1, self.a2))
+        return iter((self.op, *tuple(self.operands)))
 
     def __str__(self):
         a1, a2 = sorted([str(self.a1), str(self.a2)])
@@ -245,11 +261,11 @@ class Expr(Comparable, Flyweight):
             return '(%s %s %s)' % (a1, self.op, a2)
         else:
             # eg. "add3(a, b, c)" or "op()"
-            if len(self.operands) == 0:
+            if len(self.args) == 0:
                 params = ''
             else:
-                params = str(self.operands[0])
-                for x in self.operands[1:]:
+                params = str(self.args[0])
+                for x in self.args[1:]:
                     params += ', {}'.format(x)
             return '{op}({params})'.format(op=self.op, params=params)
 
@@ -328,8 +344,11 @@ class BExpr(Expr):
     def __init__(self, **kwargs):
         from soap.semantics import Label
         super().__init__(**kwargs)
-        if not isinstance(self.a1, Label) or not isinstance(self.a2, Label):
-            raise ValueError('BExpr allows only binary expressions.')
+        for arg in self.operands:
+            if not isinstance(arg, Label):
+                raise ValueError(
+                    'BExpr allows only binary expressions. Got {obj} of type {typ}'.format(
+                        obj=arg, typ=type(obj)))
 
 
 if __name__ == '__main__':

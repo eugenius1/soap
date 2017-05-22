@@ -48,6 +48,22 @@ def frontier(expr_set, var_env, prec=None, vary_width=None):
     return _analyser(expr_set, var_env, prec).frontier()
 
 
+def analyse_and_frontier(expr_set, var_env, prec=None, vary_width=False):
+    """Provides the area and error analysis of expressions (with 
+    input ranges and precisions) and its Pareto frontier in a tuple of 2.
+
+    :param expr_set: A set of expressions.
+    :type expr_set: set or list
+    :param var_env: The ranges of input variables.
+    :type var_env: dictionary containing mappings from variables to
+        :class:`soap.semantics.error.Interval`
+    :param precs: Precisions used to evaluate the expressions, defaults to
+        single precision.
+    :type precs: int or a list of int
+    """
+    return _analyser(expr_set, var_env, prec).analyse_and_frontier()
+
+
 def list_from_keys(result, keys=None):
     if not isinstance(keys, str):
         try:
@@ -142,7 +158,7 @@ def _log_margin(lmin, lmax):
 class Plot(object):
     """Provides plotting of results"""
     def __init__(self, result=None, var_env=None, depth=None, precs=None,
-                 log=None, legend_pos=None, **kwargs):
+                 log=None, legend_pos=None, blocking=True, **kwargs):
         """Initialisation.
 
         :param result: results provided by :func:`analyse`.
@@ -172,6 +188,7 @@ class Plot(object):
         self.precs = precs
         if not log is None:
             self.log_enable = log
+        self.blocking = blocking
         super().__init__()
 
     def add_analysis(self, expr, func=None, precs=None, var_env=None,
@@ -239,7 +256,7 @@ class Plot(object):
 
     def add(self, result, expr=None,
             legend=None, frontier=True, annotate=False, time=None, depth=None,
-            color_group=None, **kwargs):
+            color_group=None, annotate_kwargs=None, **kwargs):
         """Add analysed results.
 
         :param expr: Optional, the original expression.
@@ -268,6 +285,7 @@ class Plot(object):
             'legend': _escape_legend(legend),
             'frontier': frontier,
             'annotate': annotate,
+            'annotate_kwargs': annotate_kwargs,
             'color_group': color_group,
             'kwargs': kwargs
         })
@@ -293,7 +311,7 @@ class Plot(object):
         return itertools.cycle('bgrcmyk')
 
     def _markers(self):
-        return itertools.cycle('so+x.v^<>')
+        return itertools.cycle('so^+x.v^<>')
 
     def _auto_scale(self, plot, xlim, ylim):
         try:
@@ -363,8 +381,11 @@ class Plot(object):
                     plot.fill_between(lx, ly, max(ly),
                                       alpha=0.1, color=plot_kwargs['color'])
                 if r['annotate']:
+                    annotate_kwargs = {'alpha': 0.5}
+                    if r['annotate_kwargs']:
+                        annotate_kwargs.update(r['annotate_kwargs'])
                     for x, y, e in zip(area, error, expr):
-                        plot.annotate(str(e), xy=(x, y), alpha=0.5)
+                        plot.annotate(str(e), xy=(x, y), **annotate_kwargs)
         for r in self.result_list:
             scatter_kwargs = dict(self.scatter_defaults)
             scatter_kwargs.update(r['kwargs'])
@@ -404,6 +425,8 @@ class Plot(object):
         """Shows the plot"""
         logger.info('Showing plot')
         self._plot()
+        if not self.blocking:
+            pyplot.ion()
         pyplot.show()
 
     def save(self, *args, **kwargs):

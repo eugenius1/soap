@@ -202,9 +202,7 @@ def multiplier(we, wf):
 
 
 def luts_for_op(op, we, wf):
-    if op == ADD3_OP:
-        return 1377
-    assert op in _op_luts
+    assert op in _op_luts, '{} not in collection of length {}'.format(op, len(_op_luts))
     return _impl(_op_luts[op], we, wf)
 
 

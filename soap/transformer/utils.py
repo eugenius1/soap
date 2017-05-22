@@ -15,9 +15,11 @@ from soap.transformer.martel import MartelBiOpTreeTransformer
 from soap.analysis import expr_frontier
 
 
-def closure(tree, **kwargs):
+def closure(tree, transformer=None, **kwargs):
     """The full transitive closure."""
-    return BiOpTreeTransformer(tree, **kwargs).closure()
+    if not transformer:
+        transformer = BiOpTreeTransformer
+    return transformer(tree, **kwargs).closure()
 
 
 def full_closure(tree, **kwargs):
@@ -25,7 +27,7 @@ def full_closure(tree, **kwargs):
     return closure(tree)
 
 
-def greedy_frontier_closure(tree, var_env=None, prec=None, **kwargs):
+def greedy_frontier_closure(tree, var_env=None, prec=None, transformer=None, **kwargs):
     """Our greedy transitive closure.
 
     :param tree: The expression(s) under transform.
@@ -41,7 +43,9 @@ def greedy_frontier_closure(tree, var_env=None, prec=None, **kwargs):
         func = lambda s: expr_frontier(s, var_env, prec)
     else:
         func = None
-    closure = BiOpTreeTransformer(tree, step_plugin=func, **kwargs).closure()
+    if not transformer:
+        transformer = BiOpTreeTransformer
+    closure = transformer(tree, step_plugin=func, **kwargs).closure()
     return expr_frontier(closure, var_env, prec)
 
 
@@ -152,7 +156,7 @@ class TraceExpr(Expr):
             subtraces, depth=depth, var_env=var_env, prec=prec, **kwargs))
         return closure, closure | subtraces | list_to_expr_set(discovered)
 
-    def clousure(self, trees, **kwargs):
+    def closure(self, trees, **kwargs):
         raise NotImplementedError
 
     def __repr__(self):
@@ -178,8 +182,13 @@ class FrontierTraceExpr(TraceExpr):
     """A subclass of :class:`TraceExpr` to generate our frontier_trace
     equivalent expressions."""
     def closure(self, trees, **kwargs):
-        return expr_frontier(closure(trees, depth=kwargs['depth']),
-                             kwargs['var_env'], prec=kwargs['prec'])
+        return expr_frontier(
+            closure(trees,
+                depth=kwargs['depth'],
+                transformer=kwargs.get('transformer', None)
+            ),
+            kwargs['var_env'],
+            prec=kwargs['prec'])
 
 
 def martel_trace(tree, var_env=None, depth=2, prec=None, **kwargs):

@@ -83,10 +83,10 @@ def two_add2_to_one_add3(t):
     s = []
     # (a + b) + c == add3(a, b, c)
     if is_expr(t.a1) and t.a1.op == ADD_OP:
-        s.extend([Expr(ADD3_OP, *t.a1.operands, t.a2)])
+        s.extend([Expr(ADD3_OP, *t.a1.args, t.a2)])
     # a + (b + c) == add3(a, b, c)
     if is_expr(t.a2) and t.a2.op == ADD_OP:
-        s.extend([Expr(ADD3_OP, t.a1, *t.a2.operands)])
+        s.extend([Expr(ADD3_OP, t.a1, *t.a2.args)])
     return s
 
 @none_to_list
@@ -245,36 +245,149 @@ class BiOpTreeTransformer(TreeTransformer):
                 'Transformed: %s %s' % (to, t, no, tn))
 
 
-class FusedBiOpTreeTransformer(BiOpTreeTransformer):
-    """The class that adds transformation to and from fused unit expressions.
+class FusedOnlyBiOpTreeTransformer(TreeTransformer):
+    """The class that only makes transformations to and from fused unit expressions.
 
     It has the same arguments as :class:`soap.transformer.BiOpTreeTransformer`,
     which is the class it is derived from."""
-    transform_methods = [associativity,
-                         distribute_for_distributivity,
-                         collect_for_distributivity,
-                         two_add2_to_one_add3]
+    transform_methods = [two_add2_to_one_add3]
+
+    reduction_methods = BiOpTreeTransformer.reduction_methods
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class FusedBiOpTreeTransformer(BiOpTreeTransformer):
+    """The class that has transformations for both BiOp and Fused.
+
+    It has the same arguments as :class:`soap.transformer.BiOpTreeTransformer`,
+    which is the class it is derived from."""
+    transform_methods = BiOpTreeTransformer.transform_methods + \
+        FusedOnlyBiOpTreeTransformer.transform_methods
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
 
 if __name__ == '__main__':
-    from soap.common import profiled, timed
+    import time
+    import gmpy2
+    from soap.common import profiled, timed, invalidate_cache
+    from soap.analysis.utils import plot, analyse, analyse_and_frontier
+    from soap.transformer.utils import greedy_frontier_closure, greedy_trace, frontier_trace, martel_trace
+    from soap.analysis import Plot
+    from soap.analysis.core import pareto_frontier_2d
+    
     Expr.__repr__ = Expr.__str__
     logger.set_context(level=logger.levels.info)
-    # e = '(a + 1) * b | (b + 1) * a | a * b'
-    e = '(a + b) + c'
+    single_prec = gmpy2.ieee(32).precision - 1
+
+    e = '(a + 1) * b | (b + 1) * a | a * b'
+    #e = '(a + b) + c'
     v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
+    e2 = Expr('((a + a) + b) * ((a + b) + b)')
+    e60 = Expr("""
+        (
+            (
+                (   
+                    (
+                        (
+                            ((a + a) + b) 
+                            * ((a + b) + b)
+                        ) 
+                        * ((b + b) + c)
+                    ) 
+                    * ((b + c) + c)
+                ) 
+                * ((c + c) + a)
+            ) 
+            * ((c + a) + a)
+        )""")
+    e6 = Expr("""
+        (
+            (
+                (
+                    ((a + a) + b) 
+                    * ((a + b) + b)
+                )
+                * (
+                    ((b + b) + c)
+                    * ((b + c) + c)
+                )
+            )
+            * (
+                ((c + c) + a)
+                * ((c + a) + a)
+            )
+        )""")
+    v6 = {
+        'a': ['1', '2'],
+        'b': ['10', '20'],
+        'c': ['100', '200'],
+    }
+    v6a = v6
+    v6a['a'], v6a['b'] = v6a['c'], v6a['c']
+    #e, v = e6, v6
     t = Expr(e)
     logger.info('Expr:', str(t))
     logger.info('Tree:', t.tree())
-    from soap.analysis.utils import plot, analyse
+    
+    # l = [
+    #     (False, greedy_trace,   'x'),
+    #     (True, frontier_trace, '+'),
+    #     (True,  martel_trace,   'o'),
+    # ]
+    # p = Plot(depth=3, var_env=v)#, legend_pos=(1.1, 0.5))
+    # for s, f, m in l:
+    #     if s:
+    #         t = r'out of memory'
+    #         fn = f.__name__
+    #         f = lambda *args, **kwargs: []
+    #         f.__name__ = fn
+    #     else:
+    #         t = True
+    #     logger.info(f.__name__)
+    #     p.add_analysis(e, func=f, marker=m,
+    #                    legend=f.__name__, legend_time=t)
+    # p.add_analysis(e, legend='original', marker='o', s=300)
+    # p.show()
+
+
+    # fused unit = 3-input FP adder(s)
+    actions = (
+        (BiOpTreeTransformer, 'no transformations to fused units'),
+        (FusedBiOpTreeTransformer, 'fused units considered'),
+        (FusedOnlyBiOpTreeTransformer, 'only transformations to fused units'))
+    plots = []
     # with profiled(), timed():
-    for Transformer in (BiOpTreeTransformer, FusedBiOpTreeTransformer):
-        with timed():
-            s = Transformer(t).closure()
-        logger.info('Transformed:', len(s))
-        a = analyse(s, v)
-        logger.info(a)
-        plot(a)
+    for action in (actions, actions[::-1])[:1]:
+        z = []
+        frontier = []
+        p = Plot(depth=3, var_env=v, blocking=False, legend_pos=(1.1, 0.5))
+        for Transformer, label in action:
+            invalidate_cache()
+            duration = time.time()
+            # s = Transformer(t, depth=2).closure()
+            # s = frontier_trace(t, v, depth=None, transformer=Transformer)#, prec=single_prec)
+            s = greedy_trace(t, v, depth=5, transformer=Transformer)#, prec=single_prec)
+            duration = time.time() - duration # where ?
+            unfiltered, frontier = analyse_and_frontier(s, v)
+
+            logger.info('Transformed:', len(s))
+            logger.warning('Reduced by ', len(unfiltered)-len(frontier))
+            logger.info(frontier)
+            # plot(frontier, blocking=False)
+            p.add(frontier, legend=label, time=duration, annotate=True, annotate_kwargs={'fontsize': 10})
+            z.append(set(map(lambda d:(d['area'], d['error'], d['expression']), frontier)))
+
+        logger.warning(z[0]-z[1])
+        logger.warning()
+        logger.warning(z[1]-z[0])
+
+        # find min error and area here
+
+        p.add_analysis(t, legend='original expression', s=300)
+        p.show()
+
+    input('Press Enter to continue...')

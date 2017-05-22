@@ -151,10 +151,18 @@ class AreaErrorAnalysis(ErrorAnalysis, AreaAnalysis):
 
     It is a subclass of :class:`ErrorAnalysis` and :class:`AreaAnalysis`.
     """
-    def frontier(self):
+    def frontier(self, analysis=None):
         """Computes the Pareto frontier from analysed results.
         """
-        return pareto_frontier_2d(self.analyse(), keys=self.names())
+        if analysis == None:
+            analysis = self.analyse()
+        return pareto_frontier_2d(analysis, keys=self.names())
+
+    def analyse_and_frontier(self):
+        """Computes the Pareto frontier from analysed results.
+        """
+        analysis = self.analyse()
+        return analysis, pareto_frontier_2d(analysis, keys=self.names())
 
 
 class VaryWidthAnalysis(AreaErrorAnalysis):
