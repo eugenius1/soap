@@ -73,6 +73,7 @@ def distribute_for_distributivity(t):
             s.append(Expr(t.a1.op,
                           Expr(t.op, t.a1.a1, t.a2),
                           Expr(t.op, t.a1.a2, t.a2)))
+    # logger.debug(distribute_for_distributivity.__name__, t, s)
     return s
 
 
@@ -283,11 +284,11 @@ if __name__ == '__main__':
     logger.set_context(level=logger.levels.info)
     single_prec = gmpy2.ieee(32).precision - 1
 
-    e = '(a + 1) * b | (b + 1) * a | a * b'
-    #e = '(a + b) + c'
+    # e = '(a + 1) * b | (b + 1) * a | a * b'
+    e = '(a + b) + c'
     v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
-    e2 = Expr('((a + a) + b) * ((a + b) + b)')
-    e60 = Expr("""
+    e2 = '((a + a) + b) * ((a + b) + b)'
+    e60 = """
         (
             (
                 (   
@@ -303,8 +304,8 @@ if __name__ == '__main__':
                 * ((c + c) + a)
             ) 
             * ((c + a) + a)
-        )""")
-    e6 = Expr("""
+        )"""
+    e6 = """
         (
             (
                 (
@@ -320,7 +321,7 @@ if __name__ == '__main__':
                 ((c + c) + a)
                 * ((c + a) + a)
             )
-        )""")
+        )"""
     v6 = {
         'a': ['1', '2'],
         'b': ['10', '20'],
@@ -328,31 +329,91 @@ if __name__ == '__main__':
     }
     v6a = v6
     v6a['a'], v6a['b'] = v6a['c'], v6a['c']
-    #e, v = e6, v6
+
+    benchmarks = {
+        '2d_hydro': {
+            'e': 'z + (0.175 * ((((((a*b) + (c*d)) + (e*f)) + (g*h)) + i) + j))',
+            'v': {'a':[0,1],'b':[0,1],'c':[0,1],'d':[0,1],'e':[0,1],'f':[0,1],'g':[0,1],'h':[0,1],'i':[0,1],'j':[-1,0],'z':[0,1],}
+        },
+        'fdtd_1': {
+            'e': 'a + (0.5*(c + b))',
+            'v': {'a':[0,1],'b':[-1,0],'c':[0,1]}
+        },
+        'fdtd': {
+            'e': 'a + (-0.7)*(b + c + d + e)',
+            'v': {'a':[0,1], 'b':[0,1], 'c':[-1,0], 'd':[0,1], 'e':[-1,0]}
+        },
+        'filter': {
+            'e': 'a0 * y0 + a1 * y1 + a2 * y2 + b0 * x0 + b1 * x1 + b2 * x2',
+            'v': {
+                'x0': [0.0, 1.0],
+                'x1': [0.0, 1.0],
+                'x2': [0.0, 1.0],
+                'y0': [0.0, 1.0],
+                'y1': [0.0, 1.0],
+                'y2': [0.0, 1.0],
+                'a0': [0.2, 0.3],
+                'a1': [0.1, 0.2],
+                'a2': [0.0, 0.1],
+                'b0': [0.2, 0.3],
+                'b1': [0.1, 0.2],
+                'b2': [0.0, 0.1]
+            }
+        },
+        'gemm': {
+            'e': 'C + 32412 * A * B',
+            'v': {
+                'A': [0, 1],
+                'B': [0, 1],
+                'C': [0, 1]
+            }
+        },
+        'seidel': {
+            'e': '0.2*(a+b+c+d+e)',
+            'v': {
+                'a': [0, 1],
+                'b': [0, 1],
+                'c': [0, 1],
+                'd': [0, 1],
+                'e': [0, 1],
+            }
+        },
+        'symm': {
+            'e': 'beta * C + alpha * A * B + alpha * acc',
+            'v': { # find ranges
+                'alpha': [0, 1],
+                'beta': [0, 1],
+                'A': [0, 1],
+                'B': [0, 1],
+                'C': [0, 1],
+                'acc': [0, 1],
+            }
+        },
+        'taylor_b': {
+            'e': 'b * (2 * i + 1) * (2 * i)',
+            'v': {
+                'b': [0, 7e48], # ~ product of (4*i^2) from i=1 to 20 is (4^20 * (20!)^2)
+                'i': [1, 20],
+            }
+        },
+        'taylor_p': {
+            'e': '(x + y) * (x + y)',
+            'v': {
+                'p': [0, 1.21**40], # (x+y)^20 ~ 2048
+                'x': [-0.1, 0.1],
+                'y': [0, 1],
+            }
+        },
+
+
+    }
+
+    # e, v = e2, v6
+    bench_name = 'taylor_p'
+    e, v = benchmarks[bench_name]['e'], benchmarks[bench_name]['v']
     t = Expr(e)
     logger.info('Expr:', str(t))
     logger.info('Tree:', t.tree())
-    
-    # l = [
-    #     (False, greedy_trace,   'x'),
-    #     (True, frontier_trace, '+'),
-    #     (True,  martel_trace,   'o'),
-    # ]
-    # p = Plot(depth=3, var_env=v)#, legend_pos=(1.1, 0.5))
-    # for s, f, m in l:
-    #     if s:
-    #         t = r'out of memory'
-    #         fn = f.__name__
-    #         f = lambda *args, **kwargs: []
-    #         f.__name__ = fn
-    #     else:
-    #         t = True
-    #     logger.info(f.__name__)
-    #     p.add_analysis(e, func=f, marker=m,
-    #                    legend=f.__name__, legend_time=t)
-    # p.add_analysis(e, legend='original', marker='o', s=300)
-    # p.show()
-
 
     # fused unit = 3-input FP adder(s)
     actions = (
@@ -361,33 +422,38 @@ if __name__ == '__main__':
         (FusedOnlyBiOpTreeTransformer, 'only transformations to fused units'))
     plots = []
     # with profiled(), timed():
-    for action in (actions, actions[::-1])[:1]:
-        z = []
-        frontier = []
-        p = Plot(depth=3, var_env=v, blocking=False, legend_pos=(1.1, 0.5))
-        for Transformer, label in action:
-            invalidate_cache()
-            duration = time.time()
-            # s = Transformer(t, depth=2).closure()
-            # s = frontier_trace(t, v, depth=None, transformer=Transformer)#, prec=single_prec)
-            s = greedy_trace(t, v, depth=5, transformer=Transformer)#, prec=single_prec)
-            duration = time.time() - duration # where ?
-            unfiltered, frontier = analyse_and_frontier(s, v)
+    for trace_ in (
+        (frontier_trace, 3),
+        (greedy_trace, None))[1:]:
+        for action in (actions, actions[::-1])[:1]:
+            z = []
+            frontier = []
+            p = Plot(depth=3, var_env=v, blocking=False)#,legend_pos='top right')
+            for Transformer, label in action:
+                invalidate_cache()
+                duration = time.time()
+                s = Transformer(t, depth=None).closure()
+                #s = trace_[0](t, v, depth=trace_[1], transformer=Transformer)
+                unfiltered, frontier = analyse_and_frontier(s, v, prec=single_prec)
+                duration = time.time() - duration # where to put this?
 
-            logger.info('Transformed:', len(s))
-            logger.warning('Reduced by ', len(unfiltered)-len(frontier))
-            logger.info(frontier)
-            # plot(frontier, blocking=False)
-            p.add(frontier, legend=label, time=duration, annotate=True, annotate_kwargs={'fontsize': 10})
-            z.append(set(map(lambda d:(d['area'], d['error'], d['expression']), frontier)))
+                logger.info('Transformed:', len(s))
+                logger.info('Reduced by ', len(unfiltered)-len(frontier))
+                if len(frontier) <= 1:
+                    # plot non-frontier points too
+                    frontier = unfiltered
+                logger.info(frontier)
+                # plot(frontier, blocking=False)
+                p.add(frontier, legend=label, time=duration, annotate=True, annotate_kwargs={'fontsize': 10})
+                z.append(set(map(lambda d:(d['area'], d['error'], d['expression']), frontier)))
 
-        logger.warning(z[0]-z[1])
-        logger.warning()
-        logger.warning(z[1]-z[0])
+            logger.warning(z[0]-z[1])
+            logger.warning()
+            logger.warning(z[1]-z[0])
 
-        # find min error and area here
+            # find min error and area here
 
-        p.add_analysis(t, legend='original expression', s=300)
-        p.show()
+            p.add_analysis(t, legend='original expression', s=300)
+            p.show()
 
     input('Press Enter to continue...')

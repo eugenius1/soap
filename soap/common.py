@@ -181,3 +181,15 @@ class Flyweight(object):
         v = object.__new__(cls)
         cls._cache[key] = v
         return v
+
+
+def print_return(pre=''):
+    """Function wrapper that prints function return"""
+    def decorate(func):
+        def call(*args, **kwargs):
+            output = func(*args, **kwargs)
+            logger.debug('{pre}{f}(*{args}, **{kwargs}) returned {out}'.format(
+                pre=pre, f=func.__name__, args=args, kwargs=kwargs, out=output))
+            return output
+        return call
+    return decorate

@@ -5,15 +5,11 @@
 import gmpy2
 from gmpy2 import mpfr, mpq as _mpq
 
-from soap.common import Comparable
+from soap.common import Comparable, print_return
 from soap.semantics import Lattice
-# from soap.expr.common import (
-#     ADD3_OP
-# )
-ADD_OP = '+'
-SUBTRACT_OP = '-'
-MULTIPLY_OP = '*'
-ADD3_OP = 'add3'
+from soap.expr.common import (
+    ADD_OP, SUBTRACT_OP, MULTIPLY_OP, ADD3_OP
+)
 
 mpfr_type = type(mpfr('1.0'))
 mpq_type = type(_mpq('1.0'))
@@ -48,6 +44,7 @@ def ulp(v):
         return mpfr('Inf')
 
 
+@print_return()
 def round_off_error(interval):
     error = ulp(max(abs(interval.min), abs(interval.max))) / 2
     return FractionInterval([-error, error])
@@ -99,6 +96,9 @@ class Interval(Lattice):
 
     def __str__(self):
         return '[%s, %s]' % (str(self.min), str(self.max))
+
+    def __repr__(self):
+        return '{cls}[{min}, {max}]'.format(cls=self.__class__.__name__, min=self.min, max=self.max)
 
     def __eq__(self, other):
         if not isinstance(other, Interval):

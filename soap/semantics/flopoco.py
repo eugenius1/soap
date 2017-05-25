@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from soap.common import cached, timeit
 import soap.logger as logger
 from soap.expr import ADD_OP, MULTIPLY_OP, ADD3_OP
+from soap.common import print_return
 
 
 class FlopocoMissingImplementationError(Exception):
@@ -201,6 +202,7 @@ def multiplier(we, wf):
     return _impl(_mul, we, wf)
 
 
+# @print_return('flopoco.')
 def luts_for_op(op, we, wf):
     assert op in _op_luts, '{} not in collection of length {}'.format(op, len(_op_luts))
     return _impl(_op_luts[op], we, wf)

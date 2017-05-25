@@ -62,7 +62,6 @@ class AreaSemantics(Comparable, Lattice):
     def _area(self):
         wf = self.p
         we = self.e.exponent_width(self.v, wf)
-        # logger.debug('we={}, wf={}'.format(we, wf))
         op_counts = self._op_counts()
         luts = 0
         for op in op_counts:

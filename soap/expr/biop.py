@@ -4,13 +4,14 @@
 """
 import gmpy2
 
-from soap.common import Comparable, Flyweight, cached, ignored
+from soap.common import Comparable, Flyweight, cached, ignored, print_return
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, BARRIER_OP, COMMUTATIVITY_OPERATORS,
     ADD3_OP
 )
 from soap.expr.parser import parse
 import soap.logger as logger
+
 
 class Expr(Comparable, Flyweight):
     """The expression class."""
@@ -25,7 +26,7 @@ class Expr(Comparable, Flyweight):
             2. ``Expr(op='+', a1=a, a2=b)``
             3. ``Expr('+', operands=(a, b))``
         """
-        logger.debug('Expr(*{}, **{})'.format(args, kwargs))
+        # logger.debug('Expr(*{}, **{})'.format(args, kwargs))
         if not args and not kwargs:
             logger.error('class Expr: no `args`')
             logger.error('  kwargs={}'.format(kwargs))
@@ -61,8 +62,6 @@ class Expr(Comparable, Flyweight):
             if not isinstance(operands, (list, tuple)):
                 # put number into tuple
                 operands = (operands,)
-            else:
-                logger.debug('class Expr: args[1]={} of type {}'.format(args[1], type(args[1])))
         # Expr(op, a1, a2, a3,...)
         else: # len(args) > 2:
             op, *operands = args
@@ -93,6 +92,7 @@ class Expr(Comparable, Flyweight):
         return self.operands
 
     @cached
+    @print_return('Expr.')
     def error(self, var_env, prec):
         """Computes the error bound of its evaulation.
 
@@ -150,6 +150,7 @@ class Expr(Comparable, Flyweight):
         return max(we, we_min)
 
     @cached
+    # @print_return('Expr.')
     def area(self, var_env, prec):
         """Computes the area estimation of its evaulation.
 
