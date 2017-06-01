@@ -10,10 +10,10 @@ BARRIER_OP = '|'
 UNARY_SUBTRACT_OP = '-'
 # add3(a, b, c) == (a + b + c)
 ADD3_OP = 'add3'
-# const_mult(z, a) == (z * a), where z is a constant number
-CONSTANT_MULTIPLY_OP = 'const_mult'
+# constMult(z, a) == (z * a), where z is a constant number
+CONSTANT_MULTIPLY_OP = 'constMult'
 
-OPERATORS = [ADD_OP, MULTIPLY_OP, ADD3_OP]
+OPERATORS = [ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP]
 
 OPERATORS_WITH_AREA_INFO = OPERATORS
 

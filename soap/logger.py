@@ -139,6 +139,19 @@ for i, l in enumerate(labels):
     globals()[l + '_enable'] = log_enable(i)
 
 
+def print_return(pre=''):
+    """Function wrapper that prints function return"""
+    import functools
+    def decorate(func):
+        def call(*args, **kwargs):
+            output = func(*args, **kwargs)
+            debug('{pre}{f}(*{args}, **{kwargs}) returned {out}'.format(
+                pre=pre, f=func.__name__, args=args, kwargs=kwargs, out=output))
+            return output
+        return functools.wraps(func)(call)
+    return decorate
+
+
 if __name__ == '__main__':
     set_context(level=levels.debug)
     info('Hello')

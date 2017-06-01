@@ -96,16 +96,17 @@ def two_add2_to_one_add3(t):
     return s
 
 
+@logger.print_return()
 @none_to_list
 def fuse_constant_multiplication(t):
     if t.op != MULTIPLY_OP:
         return
-    # 3 * a ==> const_mult(3, a)
+    # 3 * a ==> constMult(3, a)
     if _is_exact(t.a1) and not _is_exact(t.a2):
-        return [Expr(CONST_MULTIPLY_OP, t.a1, t.a2)]
-    # a * 3 ==> const_mult(3, a)
+        return [Expr(CONSTANT_MULTIPLY_OP, t.a1, t.a2)]
+    # a * 3 ==> constMult(3, a)
     elif _is_exact(t.a2) and not _is_exact(t.a1):
-        return [Expr(CONST_MULTIPLY_OP, t.a2, t.a1)]
+        return [Expr(CONSTANT_MULTIPLY_OP, t.a2, t.a1)]
 
 
 @none_to_list
@@ -279,7 +280,8 @@ class ConstMultTreeTransformer(SingleUnitTreeTransformer):
 
 class FusedOnlyBiOpTreeTransformer(SingleUnitTreeTransformer):
     """The class that only makes transformations to and from fused unit expressions."""
-    transform_methods = Add3TreeTransformer.transform_methods
+    transform_methods = Add3TreeTransformer.transform_methods + \
+        ConstMultTreeTransformer.transform_methods
 
 
 class FusedBiOpTreeTransformer(BiOpTreeTransformer):
@@ -302,11 +304,12 @@ if __name__ == '__main__':
     from tests.benchmarks import benchmarks
     
     Expr.__repr__ = Expr.__str__
-    logger.set_context(level=logger.levels.info)
+    logger.set_context(level=logger.levels.debug)
     single_prec = gmpy2.ieee(32).precision - 1
 
     # e = '(a + 1) * b | (b + 1) * a | a * b'
     e = '(a + b) + c'
+    e_cm = '3 * a * 2'
     v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
     e2 = '((a + a) + b) * ((a + b) + b)'
     e60 = """
@@ -351,9 +354,8 @@ if __name__ == '__main__':
     v6a = v6
     v6a['a'], v6a['b'] = v6a['c'], v6a['c']
 
-
-    # e, v = e2, v6
-    e, v = benchmarks['taylor_p'].expr_and_vars()
+    e, v = e_cm, v
+    # e, v = benchmarks['seidel'].expr_and_vars()
     t = Expr(e)
     logger.info('Expr:', str(t))
     logger.info('Tree:', t.tree())
@@ -364,13 +366,14 @@ if __name__ == '__main__':
         (FusedBiOpTreeTransformer, 'any fused'),
         (FusedOnlyBiOpTreeTransformer, 'only fusing'),
         (Add3TreeTransformer, 'only add3 fusing'),
+        (ConstMultTreeTransformer, 'only constMult fusing'),
     )
     plots = []
     # with profiled(), timed():
     for trace_ in (
         (frontier_trace, 3),
         (greedy_trace, None))[1:]:
-        for action in (actions, actions[::-1])[:1]:
+        for action in (actions, actions[::-1])[:1]: # forwards or backwards
             z = []
             frontier = []
             p = Plot(depth=3, var_env=v, blocking=False)#,legend_pos='top right')

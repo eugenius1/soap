@@ -5,7 +5,9 @@ from contextlib import contextmanager
 
 from soap.common import cached, timeit
 import soap.logger as logger
-from soap.expr import ADD_OP, MULTIPLY_OP, ADD3_OP
+from soap.expr.common import (
+    ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP
+)
 from soap.common import print_return
 
 
@@ -200,6 +202,8 @@ def multiplier(we, wf):
 
 # @print_return('flopoco.')
 def luts_for_op(op, we, wf):
+    if op == CONSTANT_MULTIPLY_OP:
+        return 59
     assert op in _op_luts, '{} not in collection of length {}'.format(op, len(_op_luts))
     return _impl(_op_luts[op], we, wf)
 

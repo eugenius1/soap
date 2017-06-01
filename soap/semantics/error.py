@@ -196,9 +196,13 @@ class ErrorSemantics(Lattice, Comparable):
             e = round_off_error(v)
             try:
                 e += operand.e * mpq(self.exact_constant)
-            except AttributeError:
-                logger.error('{} (has no exact_constant attr). Failed to multiply with {}'.format(
-                    self, operand.e))
+            except (AttributeError, TypeError) as exception:
+                logger.error('ErrorSemantics.do_op({self}, {op}, {others})'.format(
+                    *list(map(repr,(self, op, others)))))
+                if exception == AttributeError:
+                    logger.error('most likely that self does not have an exact_constant attr')
+                elif exception == TypeError:
+                    logger.error(type(self.exact_constant))
                 e += operand.e * FractionInterval(self.v)
         return ErrorSemantics(v, e)
 

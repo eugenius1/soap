@@ -6,8 +6,9 @@ import gmpy2
 
 from soap.common import Comparable, Flyweight, cached, ignored, print_return
 from soap.expr.common import (
-    ADD_OP, MULTIPLY_OP, BARRIER_OP, COMMUTATIVITY_OPERATORS,
-    ADD3_OP, CONSTANT_MULTIPLY_OP,
+    ADD_OP, MULTIPLY_OP, BARRIER_OP,
+    COMMUTATIVITY_OPERATORS, PRIMITIVE_OPERATORS_WITH_2_TERMS,
+    ADD3_OP, CONSTANT_MULTIPLY_OP, 
 )
 from soap.expr.parser import parse
 import soap.logger as logger
@@ -68,6 +69,12 @@ class Expr(Comparable, Flyweight):
         operands = list(operands)
         if op == None:
             logger.error('Expr(*{}, **{}), setting op=None'.format(args, kwargs))
+        if op == CONSTANT_MULTIPLY_OP:
+            from soap.semantics.common import Label
+            from numbers import Number
+            if not isinstance(operands[0], (Number, str, Label)):
+                logger.error(CONSTANT_MULTIPLY_OP, operands)
+                raise TypeError
         self.op = op
         self.operands = operands
         # legacy: self.a1, .a2, .a3, ...
@@ -288,7 +295,9 @@ class Expr(Comparable, Flyweight):
         
         # Custom operators
         if op == ADD3_OP:
-            return Expr(op=ADD3_OP, operands=[self]+others[:2]) 
+            return Expr(op=op, operands=[self]+others[:2])
+        elif op == CONSTANT_MULTIPLY_OP:
+            return Expr(op=op, operands=[self]+others[:1])
             
     def __add__(self, other):
         return Expr(op=ADD_OP, a1=self, a2=other)

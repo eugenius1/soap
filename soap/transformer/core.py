@@ -234,9 +234,14 @@ def _walk_r(t, f, v, d):
         return s
     for e in f(t):
         s.add(e)
-    for index, a in enumerate(t.args):
-        for e in _walk_r(a, f, v, d - 1):
-            s.add(Expr(t.op, [e]+t.args[:index]+t.args[index+1:]))
+    from soap.expr.common import (
+        ADD_OP, MULTIPLY_OP,
+        ADD3_OP, CONSTANT_MULTIPLY_OP,
+    )
+    if t.op in (ADD3_OP, MULTIPLY_OP, ADD3_OP):
+        for index, a in enumerate(t.args):
+            for e in _walk_r(a, f, v, d - 1):
+                s.add(Expr(t.op, [e]+t.args[:index]+t.args[index+1:]))
     if not v:
         return s
     try:
