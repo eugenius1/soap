@@ -8,7 +8,7 @@ import random
 import soap.logger as logger
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, ASSOCIATIVITY_OPERATORS,
-    ADD3_OP,
+    ADD3_OP, CONSTANT_MULTIPLY_OP,
     LEFT_DISTRIBUTIVITY_OPERATORS, LEFT_DISTRIBUTIVITY_OPERATOR_PAIRS,
     RIGHT_DISTRIBUTIVITY_OPERATORS, RIGHT_DISTRIBUTIVITY_OPERATOR_PAIRS,
     is_expr
@@ -18,6 +18,11 @@ from soap.transformer.core import (
     item_to_list, none_to_list, TreeTransformer, ValidationError
 )
 from soap.semantics import mpq_type
+
+
+def _is_exact(v):
+    """v is an exact number (as opposed to a range)"""
+    return isinstance(v, (int, mpq_type))
 
 
 @none_to_list
@@ -40,10 +45,10 @@ def associativity(t):
     if not t.op in ASSOCIATIVITY_OPERATORS:
         return
     s = []
-    # (a + b) + c == a + (b + c)
+    # (a + b) + c ==> a + (b + c)
     if is_expr(t.a1) and t.a1.op == t.op:
         s.extend(list(expr_from_args(t.a1.args + [t.a2])))
-    # a + (b + c) == (a + b) + c
+    # a + (b + c) ==> (a + b) + c
     if is_expr(t.a2) and t.a2.op == t.op:
         s.extend(list(expr_from_args(t.a2.args + [t.a1])))
     return s
@@ -61,13 +66,13 @@ def distribute_for_distributivity(t):
         the input tree.
     """
     s = []
-    # a * (b + c) == (a * b) + (a * c)
+    # a * (b + c) ==> (a * b) + (a * c)
     if t.op in LEFT_DISTRIBUTIVITY_OPERATORS and is_expr(t.a2):
         if (t.op, t.a2.op) in LEFT_DISTRIBUTIVITY_OPERATOR_PAIRS:
             s.append(Expr(t.a2.op,
                           Expr(t.op, t.a1, t.a2.a1),
                           Expr(t.op, t.a1, t.a2.a2)))
-    # (a + b) * c == (a * c) + (b * c)
+    # (a + b) * c ==> (a * c) + (b * c)
     if t.op in RIGHT_DISTRIBUTIVITY_OPERATORS and is_expr(t.a1):
         if (t.op, t.a1.op) in RIGHT_DISTRIBUTIVITY_OPERATOR_PAIRS:
             s.append(Expr(t.a1.op,
@@ -82,13 +87,26 @@ def two_add2_to_one_add3(t):
     if t.op != ADD_OP:
         return
     s = []
-    # (a + b) + c == add3(a, b, c)
+    # (a + b) + c ==> add3(a, b, c)
     if is_expr(t.a1) and t.a1.op == ADD_OP:
         s.extend([Expr(ADD3_OP, *t.a1.args, t.a2)])
-    # a + (b + c) == add3(a, b, c)
+    # a + (b + c) ==> add3(a, b, c)
     if is_expr(t.a2) and t.a2.op == ADD_OP:
         s.extend([Expr(ADD3_OP, t.a1, *t.a2.args)])
     return s
+
+
+@none_to_list
+def fuse_constant_multiplication(t):
+    if t.op != MULTIPLY_OP:
+        return
+    # 3 * a ==> const_mult(3, a)
+    if _is_exact(t.a1) and not _is_exact(t.a2):
+        return [Expr(CONST_MULTIPLY_OP, t.a1, t.a2)]
+    # a * 3 ==> const_mult(3, a)
+    elif _is_exact(t.a2) and not _is_exact(t.a1):
+        return [Expr(CONST_MULTIPLY_OP, t.a2, t.a1)]
+
 
 @none_to_list
 def collect_for_distributivity(t):
@@ -198,9 +216,7 @@ def constant_reduction(t):
     :type t: :class:`soap.expr.Expr`
     :returns: A list containing an expression related by this reduction rule.
     """
-    def is_exact(v):
-        return isinstance(v, (int, mpq_type))
-    if not is_exact(t.a1) or not is_exact(t.a2):
+    if not _is_exact(t.a1) or not _is_exact(t.a2):
         return
     if t.op == MULTIPLY_OP:
         return t.a1 * t.a2
@@ -246,17 +262,24 @@ class BiOpTreeTransformer(TreeTransformer):
                 'Transformed: %s %s' % (to, t, no, tn))
 
 
-class FusedOnlyBiOpTreeTransformer(TreeTransformer):
-    """The class that only makes transformations to and from fused unit expressions.
-
-    It has the same arguments as :class:`soap.transformer.BiOpTreeTransformer`,
-    which is the class it is derived from."""
-    transform_methods = [two_add2_to_one_add3]
-
+class SingleUnitTreeTransformer(TreeTransformer):
+    """Abstract class to implement tree transformers for one (distinct) type of unit."""
     reduction_methods = BiOpTreeTransformer.reduction_methods
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+
+class Add3TreeTransformer(SingleUnitTreeTransformer):
+    """The class that only makes transformations to and from the 3-operand FP adder."""
+    transform_methods = [two_add2_to_one_add3]
+
+
+class ConstMultTreeTransformer(SingleUnitTreeTransformer):
+    """The class that only makes transformations to and from the 3-operand FP adder."""
+    transform_methods = [fuse_constant_multiplication]
+
+
+class FusedOnlyBiOpTreeTransformer(SingleUnitTreeTransformer):
+    """The class that only makes transformations to and from fused unit expressions."""
+    transform_methods = Add3TreeTransformer.transform_methods
 
 
 class FusedBiOpTreeTransformer(BiOpTreeTransformer):
@@ -267,9 +290,6 @@ class FusedBiOpTreeTransformer(BiOpTreeTransformer):
     transform_methods = BiOpTreeTransformer.transform_methods + \
         FusedOnlyBiOpTreeTransformer.transform_methods
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
 
 if __name__ == '__main__':
     import time
@@ -279,6 +299,7 @@ if __name__ == '__main__':
     from soap.transformer.utils import greedy_frontier_closure, greedy_trace, frontier_trace, martel_trace
     from soap.analysis import Plot
     from soap.analysis.core import pareto_frontier_2d
+    from tests.benchmarks import benchmarks
     
     Expr.__repr__ = Expr.__str__
     logger.set_context(level=logger.levels.info)
@@ -330,96 +351,20 @@ if __name__ == '__main__':
     v6a = v6
     v6a['a'], v6a['b'] = v6a['c'], v6a['c']
 
-    benchmarks = {
-        '2d_hydro': {
-            'e': 'z + (0.175 * ((((((a*b) + (c*d)) + (e*f)) + (g*h)) + i) + j))',
-            'v': {'a':[0,1],'b':[0,1],'c':[0,1],'d':[0,1],'e':[0,1],'f':[0,1],'g':[0,1],'h':[0,1],'i':[0,1],'j':[-1,0],'z':[0,1],}
-        },
-        'fdtd_1': {
-            'e': 'a + (0.5*(c + b))',
-            'v': {'a':[0,1],'b':[-1,0],'c':[0,1]}
-        },
-        'fdtd': {
-            'e': 'a + (-0.7)*(b + c + d + e)',
-            'v': {'a':[0,1], 'b':[0,1], 'c':[-1,0], 'd':[0,1], 'e':[-1,0]}
-        },
-        'filter': {
-            'e': 'a0 * y0 + a1 * y1 + a2 * y2 + b0 * x0 + b1 * x1 + b2 * x2',
-            'v': {
-                'x0': [0.0, 1.0],
-                'x1': [0.0, 1.0],
-                'x2': [0.0, 1.0],
-                'y0': [0.0, 1.0],
-                'y1': [0.0, 1.0],
-                'y2': [0.0, 1.0],
-                'a0': [0.2, 0.3],
-                'a1': [0.1, 0.2],
-                'a2': [0.0, 0.1],
-                'b0': [0.2, 0.3],
-                'b1': [0.1, 0.2],
-                'b2': [0.0, 0.1]
-            }
-        },
-        'gemm': {
-            'e': 'C + 32412 * A * B',
-            'v': {
-                'A': [0, 1],
-                'B': [0, 1],
-                'C': [0, 1]
-            }
-        },
-        'seidel': {
-            'e': '0.2*(a+b+c+d+e)',
-            'v': {
-                'a': [0, 1],
-                'b': [0, 1],
-                'c': [0, 1],
-                'd': [0, 1],
-                'e': [0, 1],
-            }
-        },
-        'symm': {
-            'e': 'beta * C + alpha * A * B + alpha * acc',
-            'v': { # find ranges
-                'alpha': [0, 1],
-                'beta': [0, 1],
-                'A': [0, 1],
-                'B': [0, 1],
-                'C': [0, 1],
-                'acc': [0, 1],
-            }
-        },
-        'taylor_b': {
-            'e': 'b * (2 * i + 1) * (2 * i)',
-            'v': {
-                'b': [0, 7e48], # ~ product of (4*i^2) from i=1 to 20 is (4^20 * (20!)^2)
-                'i': [1, 20],
-            }
-        },
-        'taylor_p': {
-            'e': 'p * (x + y) * (x + y)',
-            'v': {
-                'p': [0, 1.21**40], # (x+y)^20 ~ 2048
-                'x': [-0.1, 0.1],
-                'y': [0, 1],
-            }
-        },
-
-
-    }
 
     # e, v = e2, v6
-    bench_name = 'taylor_p'
-    e, v = benchmarks[bench_name]['e'], benchmarks[bench_name]['v']
+    e, v = benchmarks['taylor_p'].expr_and_vars()
     t = Expr(e)
     logger.info('Expr:', str(t))
     logger.info('Tree:', t.tree())
 
     # fused unit = 3-input FP adder(s)
     actions = (
-        (BiOpTreeTransformer, 'no transformations to fused units'),
-        (FusedBiOpTreeTransformer, 'fused units considered'),
-        (FusedOnlyBiOpTreeTransformer, 'only transformations to fused units'))
+        (BiOpTreeTransformer, 'no fused'),
+        (FusedBiOpTreeTransformer, 'any fused'),
+        (FusedOnlyBiOpTreeTransformer, 'only fusing'),
+        (Add3TreeTransformer, 'only add3 fusing'),
+    )
     plots = []
     # with profiled(), timed():
     for trace_ in (

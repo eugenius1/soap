@@ -6,9 +6,10 @@ import gmpy2
 from gmpy2 import mpfr, mpq as _mpq
 
 from soap.common import Comparable, print_return
-from soap.semantics import Lattice
+import soap.logger as logger
 from soap.expr.common import (
-    ADD_OP, SUBTRACT_OP, MULTIPLY_OP, ADD3_OP
+    ADD_OP, SUBTRACT_OP, MULTIPLY_OP, ADD3_OP,
+    CONSTANT_MULTIPLY_OP,
 )
 
 mpfr_type = type(mpfr('1.0'))
@@ -27,6 +28,9 @@ def mpq(v):
     except (OverflowError, ValueError):
         return v
     return _mpq(m, mpq(2) ** (-e))
+
+
+from soap.semantics import Lattice
 
 
 def ulp(v):
@@ -56,7 +60,7 @@ def round_off_error_from_exact(v):
 
 
 def cast_error_constant(v):
-    return ErrorSemantics([v, v], round_off_error_from_exact(v))
+    return ErrorSemantics([v, v], round_off_error_from_exact(v), exact_constant=v)
 
 
 def cast_error(v, w=None):
@@ -89,10 +93,16 @@ class Interval(Lattice):
     def __sub__(self, other):
         return self.__class__([self.min - other.max, self.max - other.min])
 
+    @print_return('Interval.')
     def __mul__(self, other):
-        v = (self.min * other.min, self.min * other.max,
-             self.max * other.min, self.max * other.max)
-        return self.__class__([min(v), max(v)])
+        if isinstance(other, Interval):
+            v = (self.min * other.min, self.min * other.max,
+                 self.max * other.min, self.max * other.max)
+            return self.__class__([min(v), max(v)])
+        else:
+            # assume other is just a number
+            v = (self.min * other, self.max * other)
+            return self.__class__([min(v), max(v)])
 
     def __str__(self):
         return '[%s, %s]' % (str(self.min), str(self.max))
@@ -119,7 +129,9 @@ class FloatInterval(Interval):
 
 
 class FractionInterval(Interval):
-    """The interval containing real rational values."""
+    """The interval containing real rational values.
+    exact_constant, if applicable, is the exact representation of interval.min=interval.max
+    """
     def __init__(self, v):
         min_val, max_val = v
         super().__init__((mpq(min_val), mpq(max_val)))
@@ -130,9 +142,19 @@ class FractionInterval(Interval):
 
 class ErrorSemantics(Lattice, Comparable):
     """The error semantics."""
-    def __init__(self, v, e):
+    # for use in do_op(.)
+    _do_op_expected_others_count = {
+        ADD_OP: 1,
+        SUBTRACT_OP: 1,
+        MULTIPLY_OP: 1,
+        ADD3_OP: 2,
+        CONSTANT_MULTIPLY_OP: 1,
+    }
+
+    def __init__(self, v, e, exact_constant=None):
         self.v = FloatInterval(v)
         self.e = FractionInterval(e)
+        self.exact_constant = exact_constant
 
     def join(self, other):
         return ErrorSemantics(self.v | other.v, self.e | other.e)
@@ -152,6 +174,13 @@ class ErrorSemantics(Lattice, Comparable):
         elif op == MULTIPLY_OP:
             return self * others[0]
         
+        # validate input size
+        others_count = len(others)
+        expected_count = self._do_op_expected_others_count[op]
+        if others_count != expected_count:
+            logger.error('{cls}.{func} got {got} in others instead of {expect}'.format(
+                cls=self.__class__.__name__, func=do_op.__name__, got=others_count, expect=expected_count))
+
         # Custom operators
         v = self.v
         e = self.e
@@ -160,6 +189,17 @@ class ErrorSemantics(Lattice, Comparable):
                 v += operand.v
                 e += operand.e
             e += round_off_error(v)
+        elif op == CONSTANT_MULTIPLY_OP:
+            operand = others[0]
+            # self is the constant, operand is the variable
+            v = self.v * operand.v
+            e = round_off_error(v)
+            try:
+                e += operand.e * mpq(self.exact_constant)
+            except AttributeError:
+                logger.error('{} (has no exact_constant attr). Failed to multiply with {}'.format(
+                    self, operand.e))
+                e += operand.e * FractionInterval(self.v)
         return ErrorSemantics(v, e)
 
     def __add__(self, other):
@@ -183,9 +223,8 @@ class ErrorSemantics(Lattice, Comparable):
         return '%sx%s' % (self.v, self.e)
 
     def __repr__(self):
-        return 'ErrorSemantics([%s, %s], [%s, %s])' % \
-            (repr(self.v.min), repr(self.v.max),
-             repr(self.e.min), repr(self.e.max))
+        return '{cls}({v}, {e}, exact_constant={exact})'.format(
+            cls=self.__class__.__name__, v=repr(self.v), e=repr(self.e), exact=repr(self.exact_constant))
 
     def __eq__(self, other):
         if not isinstance(other, ErrorSemantics):
@@ -202,19 +241,25 @@ class ErrorSemantics(Lattice, Comparable):
 
 
 if __name__ == '__main__':
+    logger.set_context(level=logger.levels.debug)
     from soap.semantics import precision_context
     with precision_context(52):
         x = cast_error('0.1', '0.2')
         print(x)
         # print(x * x)
         print(x + x + x)
-        print(x.do_op(ADD3_OP, [x, x]))
+        print(x.do_op(ADD3_OP, [x, x]), 'same interval, less error')
     with precision_context(23):
         a = cast_error('5', '10')
         b = cast_error('0', '0.001')
         # print((a + b) * (a + b))
         print(a + b + b)
         print(a.do_op(ADD3_OP, [b, b]))
+    with precision_context(2):
+        a = cast_error_constant('0.2')
+        b = cast_error('0', '1')
+        print(a * b)
+        print(a.do_op(CONSTANT_MULTIPLY_OP, [b]))
     # gmpy2.set_context(gmpy2.ieee(64))
     # print(FloatInterval(['0.1', '0.2']) * FloatInterval(['5.3', '6.7']))
     # print(float(ulp(mpfr('0.1'))))

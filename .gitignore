@@ -7,3 +7,4 @@
 # symbolic links
 soap/*/soap
 soap/semantics/akpytemp
+soap/transformer/tests

@@ -7,7 +7,7 @@ import gmpy2
 from soap.common import Comparable, Flyweight, cached, ignored, print_return
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, BARRIER_OP, COMMUTATIVITY_OPERATORS,
-    ADD3_OP
+    ADD3_OP, CONSTANT_MULTIPLY_OP,
 )
 from soap.expr.parser import parse
 import soap.logger as logger
@@ -24,7 +24,7 @@ class Expr(Comparable, Flyweight):
 
             1. ``Expr('+', a, b)``
             2. ``Expr(op='+', a1=a, a2=b)``
-            3. ``Expr('+', operands=(a, b))``
+            3. ``Expr('+', operands=[a, b])``
         """
         # logger.debug('Expr(*{}, **{})'.format(args, kwargs))
         if not args and not kwargs:
@@ -257,17 +257,12 @@ class Expr(Comparable, Flyweight):
         return iter((self.op, *tuple(self.operands)))
 
     def __str__(self):
-        a1, a2 = sorted([str(self.a1), str(self.a2)])
-        if self.op != ADD3_OP: # TODO primitive:
+        if self.op in PRIMITIVE_OPERATORS_WITH_2_TERMS:
+            a1, a2 = sorted([str(self.a1), str(self.a2)])
             return '(%s %s %s)' % (a1, self.op, a2)
         else:
             # eg. "add3(a, b, c)" or "op()"
-            if len(self.args) == 0:
-                params = ''
-            else:
-                params = str(self.args[0])
-                for x in self.args[1:]:
-                    params += ', {}'.format(x)
+            params = ', '.join(map(str, self.args))
             return '{op}({params})'.format(op=self.op, params=params)
 
     def __repr__(self, mode=0):

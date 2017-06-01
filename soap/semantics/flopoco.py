@@ -18,10 +18,6 @@ wf_min, wf_max = 10, 112
 we_range = list(range(we_min, we_max + 1))
 wf_range = list(range(wf_min, wf_max + 1))
 
-# debug
-we_range = [we_min, we_max]
-wf_range = [wf_min, wf_max]
-
 directory = 'soap/semantics/'
 default_file = directory + 'area.pkl'
 template_file = directory + 'template.vhdl'
