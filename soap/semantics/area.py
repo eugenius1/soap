@@ -11,6 +11,9 @@ import soap.expr
 import soap.logger as logger
 from soap.common import Comparable
 from soap.semantics import Lattice, flopoco
+from soap.expr.common import (
+    CONSTANT_MULTIPLY_OP,
+)
 
 
 class AreaSemantics(Comparable, Lattice):
@@ -51,10 +54,16 @@ class AreaSemantics(Comparable, Lattice):
                 op = e.op
                 if op not in OPERATORS_WITH_AREA_INFO:
                     continue
-                if op in counts:
-                    counts[op] += 1
+                if op == CONSTANT_MULTIPLY_OP:
+                    # include the constant
+                    logger.warning('AreaSemantics._op_counts:', type(e.operands[0].e))
+                    key = (op, e.operands[0].e)
                 else:
-                    counts[op] = 1
+                    key = (op,)
+                if op in counts:
+                    counts[key] += 1
+                else:
+                    counts[key] = 1
             except AttributeError:
                 pass
         return counts
@@ -63,9 +72,13 @@ class AreaSemantics(Comparable, Lattice):
         wf = self.p
         we = self.e.exponent_width(self.v, wf)
         op_counts = self._op_counts()
+        base_params = dict(we=we, wf=wf)
         luts = 0
-        for op in op_counts:
-            luts += op_counts[op] * flopoco.luts_for_op(op, we=we, wf=wf)
+        for op_tuple in op_counts:
+            op_params = dict(base_params)
+            if op_tuple[0] == CONSTANT_MULTIPLY_OP:
+                op_params['constant'] = op_tuple[1]
+            luts += op_counts[op_tuple] * flopoco.luts_for_op(op_tuple[0], **op_params)
         return luts
 
     def __add__(self, other):

@@ -7,6 +7,7 @@ from gmpy2 import mpfr, mpq as _mpq
 
 from soap.common import Comparable, print_return
 import soap.logger as logger
+from soap.semantics.common import Lattice, mpq
 from soap.expr.common import (
     ADD_OP, SUBTRACT_OP, MULTIPLY_OP, ADD3_OP,
     CONSTANT_MULTIPLY_OP,
@@ -14,23 +15,6 @@ from soap.expr.common import (
 
 mpfr_type = type(mpfr('1.0'))
 mpq_type = type(_mpq('1.0'))
-
-
-def mpq(v):
-    """Unifies how mpq behaves when shit (overflow and NaN) happens."""
-    if not isinstance(v, mpfr_type):
-        try:
-            return _mpq(v)
-        except ValueError:
-            raise ValueError('Invalid value %s' % str(v))
-    try:
-        m, e = v.as_mantissa_exp()
-    except (OverflowError, ValueError):
-        return v
-    return _mpq(m, mpq(2) ** (-e))
-
-
-from soap.semantics import Lattice
 
 
 def ulp(v):

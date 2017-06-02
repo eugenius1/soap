@@ -22,7 +22,7 @@ from soap.semantics import mpq_type
 
 def _is_exact(v):
     """v is an exact number (as opposed to a range)"""
-    return isinstance(v, (int, mpq_type))
+    return isinstance(v, (int, float, mpq_type))
 
 
 @none_to_list
@@ -355,7 +355,7 @@ if __name__ == '__main__':
     v6a['a'], v6a['b'] = v6a['c'], v6a['c']
 
     e, v = e_cm, v
-    # e, v = benchmarks['seidel'].expr_and_vars()
+    e, v = benchmarks['seidel'].expr_and_vars()
     t = Expr(e)
     logger.info('Expr:', str(t))
     logger.info('Tree:', t.tree())
@@ -366,7 +366,7 @@ if __name__ == '__main__':
         (FusedBiOpTreeTransformer, 'any fused'),
         (FusedOnlyBiOpTreeTransformer, 'only fusing'),
         (Add3TreeTransformer, 'only add3 fusing'),
-        (ConstMultTreeTransformer, 'only constMult fusing'),
+        #(ConstMultTreeTransformer, 'only constMult fusing'),
     )
     plots = []
     # with profiled(), timed():
@@ -376,7 +376,8 @@ if __name__ == '__main__':
         for action in (actions, actions[::-1])[:1]: # forwards or backwards
             z = []
             frontier = []
-            p = Plot(depth=3, var_env=v, blocking=False)#,legend_pos='top right')
+            title = e.replace('\n', '').replace('  ', '').strip()
+            p = Plot(depth=3, var_env=v, blocking=False, title=title)#,legend_pos='top right')
             for Transformer, label in action:
                 invalidate_cache()
                 duration = time.time()

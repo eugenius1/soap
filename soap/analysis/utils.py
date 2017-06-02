@@ -158,7 +158,7 @@ def _log_margin(lmin, lmax):
 class Plot(object):
     """Provides plotting of results"""
     def __init__(self, result=None, var_env=None, depth=None, precs=None,
-                 log=None, legend_pos=None, blocking=True, **kwargs):
+                 log=None, legend_pos=None, blocking=True, title=None, **kwargs):
         """Initialisation.
 
         :param result: results provided by :func:`analyse`.
@@ -189,6 +189,7 @@ class Plot(object):
         if not log is None:
             self.log_enable = log
         self.blocking = blocking
+        self.title = title
         super().__init__()
 
     def add_analysis(self, expr, func=None, precs=None, var_env=None,
@@ -419,6 +420,8 @@ class Plot(object):
         plot.grid(True, which='both', ls=':')
         plot.set_xlabel('Area (Number of LUTs)')
         plot.set_ylabel('Absolute Error')
+        if self.title:
+            plot.set_title(self.title)
         return self.figure
 
     def show(self):

@@ -53,9 +53,14 @@ def get_luts(file_name):
         return int(luts.get('value'))
 
 
-def flopoco(op, we, wf, f=None, dir=None):
+def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}):
     import sh
-    from soap.expr import ADD_OP, MULTIPLY_OP
+    # copy we and wf to the objects if given inside of op_params
+    if we == None and  'we' in op_params:
+        we = op_params['we']
+    if wf == None and  'wf' in op_params:
+        wf = op_params['wf']
+
     flopoco_cmd = []
     flopoco_cmd += ['-target=' + device_name]
     dir = dir or tempfile.mkdtemp(prefix='soap_', suffix='/')
@@ -69,8 +74,18 @@ def flopoco(op, we, wf, f=None, dir=None):
             flopoco_cmd += ['FPAdder', we, wf]
         elif op == 'mul' or op == MULTIPLY_OP:
             flopoco_cmd += ['FPMultiplier', we, wf, wf]
-        elif op == 'add3':
+        elif op == ADD3_OP:
             flopoco_cmd += ['FPAdder3Input', we, wf]
+        elif op == CONSTANT_MULTIPLY_OP:
+            constant = str(op_params['constant'])
+            # wE_in wF_in wE_out wF_out wC constant_expr
+            flopoco_cmd += ['FPConstMult', we, wf, we, wf, 0, constant]
+
+            # from soap.semantics.common import mpq
+            # rational = mpq(constant)
+            # # FPConstMultRational wE_in wF_in wE_out wF_out a b
+            # flopoco_cmd += ['FPConstMultRational', we, wf, we, wf,
+            #     str(rational.numerator), str(rational.denominator)]
         else:
             raise ValueError('Unrecognised operator %s' % str(op))
         logger.debug('Flopoco', flopoco_cmd)
@@ -100,9 +115,13 @@ def xilinx(f, dir=None):
         return get_luts(file_base + '.ngc_xst.xrpt')
 
 
-def eval_operator(op, we, wf, f=None, dir=None):
-    dir, f = flopoco(op, we, wf, f, dir)
-    return dict(op=op, we=we, wf=wf, value=xilinx(f, dir))
+def eval_operator(op, we=None, wf=None, f=None, dir=None, op_params={}):
+    dir, f = flopoco(op, we, wf, f, dir, op_params=op_params)
+    # add we and wf to op_params if given
+    for string, obj in (('we', we), ('wf', wf)):
+        if obj != None:
+            op_params[string] = obj
+    return dict(op=op, value=xilinx(f, dir), **op_params)
 
 
 @timeit
@@ -200,10 +219,12 @@ def multiplier(we, wf):
     return _impl(_mul, we, wf)
 
 
-# @print_return('flopoco.')
-def luts_for_op(op, we, wf):
+@cached
+@print_return('flopoco.')
+def luts_for_op(op, we=None, wf=None, **kwargs):
     if op == CONSTANT_MULTIPLY_OP:
-        return 59
+        kwargs.update(we=we, wf=wf)
+        return eval_operator(op, op_params=kwargs).get('value')
     assert op in _op_luts, '{} not in collection of length {}'.format(op, len(_op_luts))
     return _impl(_op_luts[op], we, wf)
 

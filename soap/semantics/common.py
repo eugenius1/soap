@@ -98,3 +98,19 @@ def precision_context(prec):
     # need to include the implicit integer bit for gmpy2
     prec += 1
     return gmpy2.local_context(gmpy2.ieee(128), precision=prec)
+
+
+def mpq(v):
+    """Unifies how mpq behaves when shit (overflow and NaN) happens."""
+    from gmpy2 import mpq as _mpq
+    from soap.semantics.error import mpfr_type
+    if not isinstance(v, mpfr_type):
+        try:
+            return _mpq(v)
+        except ValueError:
+            raise ValueError('Invalid value %s' % str(v))
+    try:
+        m, e = v.as_mantissa_exp()
+    except (OverflowError, ValueError):
+        return v
+    return _mpq(m, mpq(2) ** (-e))
