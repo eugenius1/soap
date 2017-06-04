@@ -296,13 +296,15 @@ class FusedBiOpTreeTransformer(BiOpTreeTransformer):
 if __name__ == '__main__':
     import time
     import gmpy2
+    from pprint import pprint
     from soap.common import profiled, timed, invalidate_cache
     from soap.analysis.utils import plot, analyse, analyse_and_frontier
     from soap.transformer.utils import greedy_frontier_closure, greedy_trace, frontier_trace, martel_trace
     from soap.analysis import Plot
     from soap.analysis.core import pareto_frontier_2d
     from tests.benchmarks import benchmarks
-    
+    from tests.fused.analysis import improvements, mins_of_analysis
+
     Expr.__repr__ = Expr.__str__
     logger.set_context(level=logger.levels.debug)
     single_prec = gmpy2.ieee(32).precision - 1
@@ -354,6 +356,8 @@ if __name__ == '__main__':
     v6a = v6
     v6a['a'], v6a['b'] = v6a['c'], v6a['c']
 
+    timing = False
+
     e, v = e_cm, v
     e, v = benchmarks['seidel'].expr_and_vars()
     t = Expr(e)
@@ -366,9 +370,10 @@ if __name__ == '__main__':
         (FusedBiOpTreeTransformer, 'any fused'),
         (FusedOnlyBiOpTreeTransformer, 'only fusing'),
         (Add3TreeTransformer, 'only add3 fusing'),
-        #(ConstMultTreeTransformer, 'only constMult fusing'),
+        (ConstMultTreeTransformer, 'only constMult fusing'),
     )
     plots = []
+    transformer_results = []
     # with profiled(), timed():
     for trace_ in (
         (frontier_trace, 3),
@@ -378,8 +383,10 @@ if __name__ == '__main__':
             frontier = []
             title = e.replace('\n', '').replace('  ', '').strip()
             p = Plot(depth=3, var_env=v, blocking=False, title=title)#,legend_pos='top right')
-            for Transformer, label in action:
-                invalidate_cache()
+            for transformer_index, action_tuple in enumerate(action):
+                Transformer, label = action_tuple
+                if timing:
+                    invalidate_cache()
                 duration = time.time()
                 s = Transformer(t, depth=None).closure()
                 #s = trace_[0](t, v, depth=trace_[1], transformer=Transformer)
@@ -390,19 +397,27 @@ if __name__ == '__main__':
                 logger.info('Reduced by ', len(unfiltered)-len(frontier))
                 if len(frontier) <= 1:
                     # plot non-frontier points too
-                    frontier = unfiltered
-                logger.info(frontier)
-                # plot(frontier, blocking=False)
-                p.add(frontier, legend=label, time=duration, annotate=True, annotate_kwargs={'fontsize': 10})
+                    frontier_ = unfiltered
+                else:
+                    frontier_ = frontier
+                logger.info(frontier_)
+                # plot(frontier_, blocking=False)
+                p.add(frontier_, legend=label, time=duration, annotate=True, annotate_kwargs={'fontsize': 10})
                 z.append(set(map(lambda d:(d['area'], d['error'], d['expression']), frontier)))
+                if transformer_index == 0:
+                    original_mins = mins_of_analysis(frontier)
+                else:
+                    imp = improvements(original_mins, mins_of_analysis(frontier))
+                    transformer_results.append((Transformer.__name__, *imp.items()))
 
-            logger.warning(z[0]-z[1])
-            logger.warning()
-            logger.warning(z[1]-z[0])
+            logger.info('Fuse is missing:', z[0]-z[1])
+            logger.info()
+            logger.info('Fused contains:', z[1]-z[0])
 
             # find min error and area here
 
             p.add_analysis(t, legend='original expression', s=300)
             p.show()
 
+    pprint(transformer_results)
     input('Press Enter to continue...')

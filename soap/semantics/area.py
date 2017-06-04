@@ -48,6 +48,7 @@ class AreaSemantics(Comparable, Lattice):
     def _op_counts(self):
         # key is op, and value is its count
         from soap.expr.common import OPERATORS_WITH_AREA_INFO
+        from soap.semantics.common import Label
         counts = {}
         for _, e in self.s.items():
             try:
@@ -56,8 +57,11 @@ class AreaSemantics(Comparable, Lattice):
                     continue
                 if op == CONSTANT_MULTIPLY_OP:
                     # include the constant
-                    logger.warning('AreaSemantics._op_counts:', type(e.operands[0].e))
-                    key = (op, e.operands[0].e)
+                    constant = e.operands[0]
+                    if isinstance(constant, Label):
+                        constant = constant.e
+                    logger.warning('AreaSemantics._op_counts:', type(constant))
+                    key = (op, constant)
                 else:
                     key = (op,)
                 if op in counts:

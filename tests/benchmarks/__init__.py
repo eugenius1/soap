@@ -1,3 +1,6 @@
+from tests.benchmarks.polybench import dictionary as polybench_dict
+from tests.benchmarks.livermore import dictionary as livermore_dict
+
 class BenchmarkExpr(object):
     """docstring for BenchmarkExpr"""
     def __init__(self, e, v, *args, **kwargs):
@@ -21,24 +24,12 @@ class BenchmarkExpr(object):
 
     def __repr__(self):
         return '{cls}(e={e}, v={v}, name={name})'.format(
-            cls=self.__class__.__name__, e=self.e, v=self.v, name=self.name)
+            cls=self.__class__.__name__, e=repr(self.e), v=self.v, name=repr(self.name))
 
     __str__ = __repr__
         
 
 benchmarks_dict = {
-    '2d_hydro': {
-        'e': 'z + (0.175 * ((((((a*b) + (c*d)) + (e*f)) + (g*h)) + i) + j))',
-        'v': {'a':[0,1],'b':[0,1],'c':[0,1],'d':[0,1],'e':[0,1],'f':[0,1],'g':[0,1],'h':[0,1],'i':[0,1],'j':[-1,0],'z':[0,1],}
-    },
-    'fdtd_1': {
-        'e': 'a + (0.5*(c + b))',
-        'v': {'a':[0,1],'b':[-1,0],'c':[0,1]}
-    },
-    'fdtd': {
-        'e': 'a + (-0.7)*(b + c + d + e)',
-        'v': {'a':[0,1], 'b':[0,1], 'c':[-1,0], 'd':[0,1], 'e':[-1,0]}
-    },
     'filter': {
         'e': 'a0 * y0 + a1 * y1 + a2 * y2 + b0 * x0 + b1 * x1 + b2 * x2',
         'v': {
@@ -101,8 +92,9 @@ benchmarks_dict = {
         }
     },
 
-
 }
+
+benchmarks_dict.update(**polybench_dict, **livermore_dict)
 
 benchmarks = {}
 for name, params in benchmarks_dict.items():
