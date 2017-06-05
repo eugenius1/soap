@@ -47,35 +47,6 @@ benchmarks_dict = {
             'b2': [0.0, 0.1]
         }
     },
-    'gemm': {
-        'e': 'C + 32412 * A * B',
-        'v': {
-            'A': [0, 1],
-            'B': [0, 1],
-            'C': [0, 1]
-        }
-    },
-    'seidel': {
-        'e': '0.2*(a+b+c+d+e)',
-        'v': {
-            'a': [0, 1],
-            'b': [0, 1],
-            'c': [0, 1],
-            'd': [0, 1],
-            'e': [0, 1],
-        }
-    },
-    'symm': {
-        'e': 'beta * C + alpha * A * B + alpha * acc',
-        'v': { # find ranges
-            'alpha': [0, 1],
-            'beta': [0, 1],
-            'A': [0, 1],
-            'B': [0, 1],
-            'C': [0, 1],
-            'acc': [0, 1],
-        }
-    },
     'taylor_b': {
         'e': 'b * (2 * i + 1) * (2 * i)',
         'v': {
@@ -97,5 +68,5 @@ benchmarks_dict = {
 benchmarks_dict.update(**polybench_dict, **livermore_dict)
 
 benchmarks = {}
-for name, params in benchmarks_dict.items():
-    benchmarks[name] = BenchmarkExpr(params['e'], params['v'], name=name)
+for name in benchmarks_dict:
+    benchmarks[name] = BenchmarkExpr(**benchmarks_dict[name], name=name)

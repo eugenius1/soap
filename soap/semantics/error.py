@@ -77,7 +77,6 @@ class Interval(Lattice):
     def __sub__(self, other):
         return self.__class__([self.min - other.max, self.max - other.min])
 
-    @print_return('Interval.')
     def __mul__(self, other):
         if isinstance(other, Interval):
             v = (self.min * other.min, self.min * other.max,
