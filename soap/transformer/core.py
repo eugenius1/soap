@@ -237,11 +237,15 @@ def _walk_r(t, f, v, d):
     from soap.expr.common import (
         ADD_OP, MULTIPLY_OP,
         ADD3_OP, CONSTANT_MULTIPLY_OP,
+        FMA_OP,
     )
     if t.op in (ADD3_OP, MULTIPLY_OP, ADD3_OP):
         for index, a in enumerate(t.args):
             for e in _walk_r(a, f, v, d - 1):
                 s.add(Expr(t.op, [e]+t.args[:index]+t.args[index+1:]))
+    elif op == FMA_OP:
+        # ((a * b) + c) ==> ((b * a) + c)
+        s.add(Expr(t.op, [t.args[1], t.args[0], t.args[2]]))
     if not v:
         return s
     try:

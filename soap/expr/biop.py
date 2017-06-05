@@ -8,7 +8,7 @@ from soap.common import Comparable, Flyweight, cached, ignored, print_return
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, BARRIER_OP,
     COMMUTATIVITY_OPERATORS, PRIMITIVE_OPERATORS_WITH_2_TERMS,
-    ADD3_OP, CONSTANT_MULTIPLY_OP, 
+    ADD3_OP, CONSTANT_MULTIPLY_OP, FMA_OP,
 )
 from soap.expr.parser import parse
 import soap.logger as logger
@@ -294,10 +294,13 @@ class Expr(Comparable, Flyweight):
             return self | others[0]
         
         # Custom operators
+        # assuming self is the first operand
         if op == ADD3_OP:
             return Expr(op=op, operands=[self]+others[:2])
         elif op == CONSTANT_MULTIPLY_OP:
             return Expr(op=op, operands=[self]+others[:1])
+        elif op == FMA_OP:
+            return Expr(op=op, operands=[self]+others[:2])
             
     def __add__(self, other):
         return Expr(op=ADD_OP, a1=self, a2=other)

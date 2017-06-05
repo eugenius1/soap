@@ -10,7 +10,7 @@ import soap.logger as logger
 from soap.semantics.common import Lattice, mpq
 from soap.expr.common import (
     ADD_OP, SUBTRACT_OP, MULTIPLY_OP, ADD3_OP,
-    CONSTANT_MULTIPLY_OP,
+    CONSTANT_MULTIPLY_OP, FMA_OP,
 )
 
 mpfr_type = type(mpfr('1.0'))
@@ -132,6 +132,7 @@ class ErrorSemantics(Lattice, Comparable):
         MULTIPLY_OP: 1,
         ADD3_OP: 2,
         CONSTANT_MULTIPLY_OP: 1,
+        FMA_OP: 2,
     }
 
     def __init__(self, v, e, exact_constant=None):
@@ -161,7 +162,7 @@ class ErrorSemantics(Lattice, Comparable):
         others_count = len(others)
         expected_count = self._do_op_expected_others_count[op]
         if others_count != expected_count:
-            logger.error('{cls}.{func} got {got} in others instead of {expect}'.format(
+            raise ValueError('{cls}.{func} got {got} in others instead of {expect}'.format(
                 cls=self.__class__.__name__, func=do_op.__name__, got=others_count, expect=expected_count))
 
         # Custom operators
@@ -183,10 +184,19 @@ class ErrorSemantics(Lattice, Comparable):
                 logger.error('ErrorSemantics.do_op({self}, {op}, {others})'.format(
                     *list(map(repr,(self, op, others)))))
                 if exception == AttributeError:
-                    logger.error('most likely that self does not have an exact_constant attr')
+                    logger.error('most likely that self does not have an exact_constant attribute')
                 elif exception == TypeError:
                     logger.error(type(self.exact_constant))
                 e += operand.e * FractionInterval(self.v)
+        elif op == FMA_OP:
+            # (a * b) + c
+            a, b, c = self, others[:2]
+            v = (a.v * b.v) + c.v
+            e = round_off_error(v)
+            e += FractionInterval(a.v) * b.e
+            e += FractionInterval(b.v) * a.e
+            e += a.e * b.e
+            e += c.e
         return ErrorSemantics(v, e)
 
     def __add__(self, other):
