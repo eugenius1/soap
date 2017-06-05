@@ -8,10 +8,13 @@ MULTIPLY_OP = '*'
 DIVIDE_OP = '/'
 BARRIER_OP = '|'
 UNARY_SUBTRACT_OP = '-'
+
 # add3(a, b, c) == (a + b + c)
 ADD3_OP = 'add3'
 # constMult(z, a) == (z * a), where z is a constant number
 CONSTANT_MULTIPLY_OP = 'constMult'
+# Fused Multiply-Add: fma(a, b, c) == (a * b) + c
+FMA_OP = 'fma'
 
 OPERATORS = [ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP]
 

@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from soap.common import cached, timeit
 import soap.logger as logger
 from soap.expr.common import (
-    ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP
+    ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP, FMA_OP,
 )
 from soap.common import print_return
 
@@ -26,6 +26,12 @@ template_file = directory + 'template.vhdl'
 
 device_name = 'Virtex6'
 device_model = 'xc6vlx760'
+
+# Flopoco command line names
+F_DotProduct = 'DotProduct'
+F_LongAcc = 'LongAcc'
+F_LongAcc2FP = 'LongAcc2FP'
+flopoco_ops = [F_DotProduct, F_LongAcc, F_LongAcc2FP]
 
 
 @contextmanager
@@ -53,7 +59,7 @@ def get_luts(file_name):
         return int(luts.get('value'))
 
 
-def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}):
+def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
     import sh
     # copy we and wf to the objects if given inside of op_params
     if we == None and  'we' in op_params:
@@ -86,6 +92,10 @@ def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}):
             # # FPConstMultRational wE_in wF_in wE_out wF_out a b
             # flopoco_cmd += ['FPConstMultRational', we, wf, we, wf,
             #     str(rational.numerator), str(rational.denominator)]
+        elif op in flopoco_ops:
+            if op_args == None:
+                raise ValueError('Expecting a Sequence of op_args with the op {}'.format(op))
+            flopoco_cmd += [op, *op_args]
         else:
             raise ValueError('Unrecognised operator %s' % str(op))
         logger.debug('Flopoco', flopoco_cmd)
@@ -115,8 +125,8 @@ def xilinx(f, dir=None):
         return get_luts(file_base + '.ngc_xst.xrpt')
 
 
-def eval_operator(op, we=None, wf=None, f=None, dir=None, op_params={}):
-    dir, f = flopoco(op, we, wf, f, dir, op_params=op_params)
+def eval_operator(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
+    dir, f = flopoco(op, we, wf, f, dir, op_params=op_params, op_args=op_args)
     # add we and wf to op_params if given
     for string, obj in (('we', we), ('wf', wf)):
         if obj != None:
@@ -224,9 +234,31 @@ def multiplier(we, wf):
 def luts_for_op(op, we=None, wf=None, **kwargs):
     if op == CONSTANT_MULTIPLY_OP:
         kwargs.update(we=we, wf=wf)
-        return eval_operator(op, op_params=kwargs).get('value')
-    assert op in _op_luts, '{} not in collection of length {}'.format(op, len(_op_luts))
-    return _impl(_op_luts[op], we, wf)
+        luts = eval_operator(op, op_params=kwargs).get('value')
+    elif op == FMA_OP:
+        MaxMSB_in = 0
+        LSB_acc = -wf-1
+        MSB_acc = 1
+        DSPThreshold = 0.9
+
+        luts = eval_operator(F_DotProduct,
+            # DotProduct wE wFX wFY MaxMSB_in LSB_acc MSB_acc DSPThreshold
+            op_args=[we, wf, wf, MaxMSB_in, LSB_acc, MSB_acc, DSPThreshold]
+            ).get('value')
+        luts += eval_operator(F_LongAcc,
+            # LongAcc wE_in wF_in MaxMSB_in LSB_acc MSB_acc
+            op_args=[we, wf, MaxMSB_in, LSB_acc, MSB_acc]
+            ).get('value')        
+        luts += eval_operator(F_LongAcc2FP,
+            # LongAcc2FP LSB_acc MSB_acc wE_out wF_out
+            op_args=[LSB_acc, MSB_acc, we, wf]
+            ).get('value')        
+    else:
+        # non-dynamic operators with stored area info
+        assert op in _op_luts, '{} not in collection of length {}'.format(
+            op, len(_op_luts))
+        luts = _impl(_op_luts[op], we, wf)
+    return luts
 
 
 @cached
