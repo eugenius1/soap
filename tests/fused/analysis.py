@@ -27,7 +27,7 @@ def improvements(old, new):
     }
 
 
-def run(timing=False):
+def run(timing=True):
     import time
     import gmpy2
     from pprint import pprint

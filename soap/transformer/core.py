@@ -239,13 +239,15 @@ def _walk_r(t, f, v, d):
         ADD3_OP, CONSTANT_MULTIPLY_OP,
         FMA_OP,
     )
-    if t.op in (ADD3_OP, MULTIPLY_OP, ADD3_OP):
-        for index, a in enumerate(t.args):
+    if t.op in (ADD3_OP, MULTIPLY_OP, ADD3_OP, FMA_OP):
+        if t.op == FMA_OP:
+            # (a * b) + c == (b * a) + c
+            commutative_args = t.args[:2]
+        else:
+            commutative_args = t.args
+        for index, a in enumerate(commutative_args):
             for e in _walk_r(a, f, v, d - 1):
                 s.add(Expr(t.op, [e]+t.args[:index]+t.args[index+1:]))
-    # elif t.op == FMA_OP:
-    #     # ((a * b) + c) ==> ((b * a) + c)
-    #     s.add(Expr(t.op, [t.args[1], t.args[0], t.args[2]]))
     if not v:
         return s
     try:
