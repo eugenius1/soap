@@ -18,9 +18,9 @@ Requirements:
   $ pip install -r requirements.txt
 
 
-Matplotlib build instructions are available here_.
+Check `Matplotlib build instructions`_.
 
-.. here_: http://matplotlib.org/users/installing.html#build-requirements
+.. _Matplotlib build instructions: http://matplotlib.org/users/installing.html#build-requirements
 
 
 
