@@ -190,7 +190,7 @@ class ErrorSemantics(Lattice, Comparable):
                 e += operand.e * FractionInterval(self.v)
         elif op == FMA_OP:
             # (a * b) + c
-            a, b, c = self, others[:2]
+            a, b, c = self, *others[:2]
             v = (a.v * b.v) + c.v
             e = round_off_error(v)
             e += FractionInterval(a.v) * b.e

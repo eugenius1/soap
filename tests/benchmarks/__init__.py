@@ -29,7 +29,7 @@ class BenchmarkExpr(object):
     __str__ = __repr__
         
 
-benchmarks_dict = {
+custom_benchmarks_dict = {
     'filter': {
         'e': 'a0 * y0 + a1 * y1 + a2 * y2 + b0 * x0 + b1 * x1 + b2 * x2',
         'v': {
@@ -65,8 +65,21 @@ benchmarks_dict = {
 
 }
 
-benchmarks_dict.update(**polybench_dict, **livermore_dict)
+# only include from benchmark suites
+# copying
+benchmarks_dict = dict(polybench_dict)
+benchmarks_dict.update(livermore_dict)
 
+# include custom too in all
+all_benchmarks_dict = dict(benchmarks_dict)
+all_benchmarks_dict.update(custom_benchmarks_dict)
+
+# dict of dicts to dict of BenchmarkExpr's
 benchmarks = {}
+custom_benchmarks = {}
 for name in benchmarks_dict:
     benchmarks[name] = BenchmarkExpr(**benchmarks_dict[name], name=name)
+for name in custom_benchmarks_dict:
+    custom_benchmarks[name] = BenchmarkExpr(**custom_benchmarks_dict[name], name=name)
+all_benchmarks = dict(benchmarks)
+all_benchmarks.update(custom_benchmarks)

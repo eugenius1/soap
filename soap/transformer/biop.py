@@ -8,7 +8,7 @@ import random
 import soap.logger as logger
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, ASSOCIATIVITY_OPERATORS,
-    ADD3_OP, CONSTANT_MULTIPLY_OP,
+    ADD3_OP, CONSTANT_MULTIPLY_OP, FMA_OP,
     LEFT_DISTRIBUTIVITY_OPERATORS, LEFT_DISTRIBUTIVITY_OPERATOR_PAIRS,
     RIGHT_DISTRIBUTIVITY_OPERATORS, RIGHT_DISTRIBUTIVITY_OPERATOR_PAIRS,
     is_expr
@@ -107,6 +107,19 @@ def fuse_constant_multiplication(t):
     # a * 3 ==> constMult(3, a)
     elif _is_exact(t.a2) and not _is_exact(t.a1):
         return [Expr(CONSTANT_MULTIPLY_OP, t.a2, t.a1)]
+
+
+@logger.print_return()
+@none_to_list
+def mult_and_add_to_fma(t):
+    if t.op != ADD_OP:
+        return
+    # (a * b) + c ==> fma(a, b, c)
+    if is_expr(t.a1) and t.a1.op == MULTIPLY_OP:
+        return [Expr(FMA_OP, *t.a1.args, t.a2)]
+    # a + (b * c) ==> fma(b, c, a)
+    if is_expr(t.a2) and t.a2.op == MULTIPLY_OP:
+        return [Expr(FMA_OP, *t.a2.args, t.a1)]
 
 
 @none_to_list
@@ -274,14 +287,20 @@ class Add3TreeTransformer(SingleUnitTreeTransformer):
 
 
 class ConstMultTreeTransformer(SingleUnitTreeTransformer):
-    """The class that only makes transformations to and from the 3-operand FP adder."""
+    """The class that only makes transformations to and from the constant FP multiplier."""
     transform_methods = [fuse_constant_multiplication]
+
+
+class FMATreeTransformer(SingleUnitTreeTransformer):
+    """The class that only makes transformations to and from the FP Fused Multiply-Add."""
+    transform_methods = [mult_and_add_to_fma]
 
 
 class FusedOnlyBiOpTreeTransformer(SingleUnitTreeTransformer):
     """The class that only makes transformations to and from fused unit expressions."""
     transform_methods = Add3TreeTransformer.transform_methods + \
-        ConstMultTreeTransformer.transform_methods
+        ConstMultTreeTransformer.transform_methods + \
+        FMATreeTransformer.transform_methods
 
 
 class FusedBiOpTreeTransformer(BiOpTreeTransformer):

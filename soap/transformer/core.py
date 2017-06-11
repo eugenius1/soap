@@ -243,9 +243,9 @@ def _walk_r(t, f, v, d):
         for index, a in enumerate(t.args):
             for e in _walk_r(a, f, v, d - 1):
                 s.add(Expr(t.op, [e]+t.args[:index]+t.args[index+1:]))
-    elif op == FMA_OP:
-        # ((a * b) + c) ==> ((b * a) + c)
-        s.add(Expr(t.op, [t.args[1], t.args[0], t.args[2]]))
+    # elif t.op == FMA_OP:
+    #     # ((a * b) + c) ==> ((b * a) + c)
+    #     s.add(Expr(t.op, [t.args[1], t.args[0], t.args[2]]))
     if not v:
         return s
     try:
