@@ -62,7 +62,26 @@ custom_benchmarks_dict = {
             'y': [0, 1],
         }
     },
-
+    'seidel_adds': {
+        'e': '(a+b+c+d+e)',
+        'v': {
+            'a': [0, 1],
+            'b': [0, 1],
+            'c': [0, 1],
+            'd': [0, 1],
+            'e': [0, 1],
+        }
+    },
+    'seidel_var': {
+        'e': 'a+b',
+        'v': {
+            'a': [0, 1],
+            'b': [0, 1],
+            'c': [0, 1],
+            'd': [0, 1],
+            'e': [0, 1],
+        }
+    },
 }
 
 # only include from benchmark suites

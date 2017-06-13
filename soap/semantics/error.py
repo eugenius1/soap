@@ -15,9 +15,20 @@ from soap.expr.common import (
 
 mpfr_type = type(mpfr('1.0'))
 mpq_type = type(_mpq('1.0'))
+inf = mpfr('Inf')
 
 
-def ulp(v):
+def _unpack(v):
+    if type(v) is str:
+        return v, v
+    try:
+        v_min, v_max = v
+        return v_min, v_max
+    except (ValueError, TypeError):  # cannot unpack
+        return v, v
+
+
+def _ulp(v):
     """Computes the unit of the last place for a value.
 
     :param v: The value.
@@ -32,6 +43,47 @@ def ulp(v):
         return mpfr('Inf')
 
 
+def ulp(v, underflow=True):
+    """Computes the unit of the last place for a value.
+
+    FIXME big question: what is ulp(0)?
+    Definition: distance from 0 to its nearest floating-point value.
+
+    Solutions::
+      1. gradual underflow -> 2 ** (1 - offset - p)
+          don't need to change definition, possibly, don't know how mpfr
+          handles underflow stuff.
+      2. abrupt underflow -> 2 ** (1 - offset)
+          add 2 ** (1 - offset) overestimation to ulp.
+
+    :param v: The value.
+    :type v: any gmpy2 values
+    """
+    if underflow:
+        underflow_error = mpq(2) ** gmpy2.get_context().emin
+    else:
+        underflow_error = 0
+    if v == 0:  # corner case, exponent is 1
+        return underflow_error
+    if type(v) is not mpfr_type:
+        with gmpy2.local_context(round=gmpy2.RoundAwayZero):
+            v = mpfr(v)
+    try:
+        with gmpy2.local_context(round=gmpy2.RoundUp):
+            return mpfr(mpq(2) ** v.as_mantissa_exp()[1] + underflow_error)
+    except (OverflowError, ValueError):
+        return inf
+
+
+def overapproximate_error(e):
+    f = []
+    e_min, e_max = _unpack(e)
+    for v, r in [(e_min, gmpy2.RoundDown), (e_max, gmpy2.RoundUp)]:
+        with gmpy2.local_context(round=r):
+            f.append(mpfr(v))
+    return FloatInterval(f)
+
+
 @print_return()
 def round_off_error(interval):
     error = ulp(max(abs(interval.min), abs(interval.max))) / 2
@@ -40,7 +92,7 @@ def round_off_error(interval):
 
 def round_off_error_from_exact(v):
     e = mpq(v) - mpq(mpfr(v))
-    return FractionInterval([e, e])
+    return overapproximate_error([e, e])
 
 
 def cast_error_constant(v):

@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+import functools
 from contextlib import contextmanager
 
 from soap.common import cached, timeit
@@ -22,6 +23,7 @@ wf_range = list(range(wf_min, wf_max + 1))
 
 directory = 'soap/semantics/'
 default_file = directory + 'area.pkl'
+area_dynamic_file = directory + 'area_dynamic.pkl'
 template_file = directory + 'template.vhdl'
 
 device_name = 'Virtex6'
@@ -31,8 +33,10 @@ device_model = 'xc6vlx760'
 F_DotProduct = 'DotProduct'
 F_LongAcc = 'LongAcc'
 F_LongAcc2FP = 'LongAcc2FP'
-flopoco_ops = [F_DotProduct, F_LongAcc, F_LongAcc2FP]
+F_FPConstMult = 'FPConstMult'
+flopoco_ops = [F_DotProduct, F_LongAcc, F_LongAcc2FP, F_FPConstMult]
 
+use_area_dynamic_cache = True
 
 @contextmanager
 def cd(d):
@@ -59,6 +63,61 @@ def get_luts(file_name):
         return int(luts.get('value'))
 
 
+def return_lists_of_lists(func):
+    """Function decorator to ensure the output is a list with a nested list.
+    Assumes the first element of the outer list is a good indicator for nested lists,
+    i.e. doesn't check every element of the outer loop for a nested list.
+    """
+    def call(*args, **kwargs):
+        output = func(*args, **kwargs)
+        if not isinstance(output, list):
+            output = list(output)
+        if not isinstance(output[0], list):
+            output = list(map(list, output))
+        return output
+    return functools.wraps(func)(call)
+
+
+def flopoco_command_args(fop, **kwargs):
+    """Returns a list of lists.
+    Nested list contains the arguments with the flopoco op as the first one.
+    """
+    # raises KeyError if not given
+    if fop not in flopoco_ops:
+        raise ValueError('Unrecognised op {!r}'.format(fop))
+
+    we = kwargs['we']
+    wf = kwargs['wf']
+    DSPThreshold = kwargs.get('DSPThreshold', 0.9)
+    if fop == F_FPConstMult:
+        constant = str(kwargs['constant'])
+        wc = kwargs.get('wc', 0)
+        # wE_in wF_in wE_out wF_out wC constant_expr
+        return [F_FPConstMult, we, wf, we, wf, wc, constant]
+
+        # alternatively, use rational constant multiplier
+        # from soap.semantics.common import mpq
+        # rational = mpq(constant)
+        # # FPConstMultRational wE_in wF_in wE_out wF_out a b
+        # flopoco_cmd += ['FPConstMultRational', we, wf, we, wf,
+        #     str(rational.numerator), str(rational.denominator)]
+    
+    # Dot Product and Accumulator
+    elif fop in (F_DotProduct, F_LongAcc, F_LongAcc2FP):
+        LSB_acc = kwargs['LSB_acc']
+        MSB_acc = kwargs['MSB_acc']
+        if fop == F_LongAcc2FP:
+            # LongAcc2FP LSB_acc MSB_acc wE_out wF_out
+            return [F_LongAcc2FP, LSB_acc, MSB_acc, we, wf]
+        MaxMSB_in = kwargs['MaxMSB_in']
+        if fop == F_DotProduct:
+            # DotProduct wE wFX wFY MaxMSB_in LSB_acc MSB_acc DSPThreshold
+            return [F_DotProduct, we, wf, wf, MaxMSB_in, LSB_acc, MSB_acc, DSPThreshold]
+        if fop == F_LongAcc:
+            # LongAcc wE_in wF_in MaxMSB_in LSB_acc MSB_acc
+            return [F_LongAcc, we, wf, MaxMSB_in, LSB_acc, MSB_acc]
+
+
 def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
     import sh
     # copy we and wf to the objects if given inside of op_params
@@ -83,18 +142,10 @@ def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
         elif op == ADD3_OP:
             flopoco_cmd += ['FPAdder3Input', we, wf]
         elif op == CONSTANT_MULTIPLY_OP:
-            constant = str(op_params['constant'])
-            # wE_in wF_in wE_out wF_out wC constant_expr
-            flopoco_cmd += ['FPConstMult', we, wf, we, wf, 0, constant]
-
-            # from soap.semantics.common import mpq
-            # rational = mpq(constant)
-            # # FPConstMultRational wE_in wF_in wE_out wF_out a b
-            # flopoco_cmd += ['FPConstMultRational', we, wf, we, wf,
-            #     str(rational.numerator), str(rational.denominator)]
+            flopoco_cmd += flopoco_command_args(F_FPConstMult, **op_params)
         elif op in flopoco_ops:
             if op_args == None:
-                raise ValueError('Expecting a Sequence of op_args with the op {}'.format(op))
+                raise ValueError('Expecting a Sequence of op_args for the op {}'.format(op))
             flopoco_cmd += [op, *op_args]
         else:
             raise ValueError('Unrecognised operator %s' % str(op))
@@ -126,12 +177,43 @@ def xilinx(f, dir=None):
 
 
 def eval_operator(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
-    dir, f = flopoco(op, we, wf, f, dir, op_params=op_params, op_args=op_args)
-    # add we and wf to op_params if given
-    for string, obj in (('we', we), ('wf', wf)):
-        if obj != None:
-            op_params[string] = obj
-    return dict(op=op, value=xilinx(f, dir), **op_params)
+    """TODO: what if op is not dynamic"""
+    if op_args == None:
+        if op_params:
+            flopoco_args = flopoco_command_args(op, **op_params)
+            op = flopoco_args[0]
+            op_args = flopoco_args[1:]
+        else:
+            logger.error('Warning: flopoco.eval_operator given empty op_args and empty op_params'.format(
+                op_args, op_params))
+    if use_area_dynamic_cache:
+        cache_key = (op, *op_args)
+
+    # check if in dynamic cache
+    if use_area_dynamic_cache and cache_key in area_dynamic_cache:
+        luts = area_dynamic_cache[cache_key]
+    else: # evaluate
+        dir, f = flopoco(op, we, wf, f, dir, op_params=op_params, op_args=op_args)
+        # add we and wf to op_params if given
+        for string, obj in (('we', we), ('wf', wf)):
+            if obj != None:
+                op_params[string] = obj
+        # if args are in just op_args and not in op_params
+        if not op_params:
+            # set the key as the index it takes in the flopoco command, with 0 being the op
+            # append a letter to a string of the number
+            op_params.update(
+                map(
+                    lambda t:'a{}'.format(t[0]),
+                    enumerate(op_args, start=1)))
+
+        luts = xilinx(f, dir)
+        if use_area_dynamic_cache:
+            # add to dynamic cache
+            area_dynamic_cache[cache_key] = luts
+            save(area_dynamic_file, area_dynamic_cache)
+
+    return dict(op=op, value=luts, **op_params)
 
 
 @timeit
@@ -171,9 +253,10 @@ def load(file_name):
         return pickle.loads(f.read())
 
 
-def save(file_name, results):
+def save(file_name, results, do_format=False):
     import pickle
-    results = [i for i in results if not i is None]
+    if do_format:
+        results = [i for i in results if not i is None]
     with open(file_name, 'wb') as f:
         pickle.dump(results, f)
 
@@ -208,6 +291,14 @@ if os.path.isfile(default_file):
 _add = _op_luts[ADD_OP]
 _mul = _op_luts[MULTIPLY_OP]
 
+# Area dynamic cache
+if os.path.isfile(area_dynamic_file):
+    area_dynamic_cache = load(area_dynamic_file)
+else: # create file
+    area_dynamic_cache = {}
+    save(area_dynamic_file, area_dynamic_cache)
+
+
 def _impl(_dict, we, wf):
     try:
         return _dict[we, wf]
@@ -232,32 +323,43 @@ def multiplier(we, wf):
 @cached
 @print_return('flopoco.')
 def luts_for_op(op, we=None, wf=None, **kwargs):
+    if op in _op_luts:
+        return _impl(_op_luts[op], we, wf)
+
+    kwargs.update(we=we, wf=wf)
     if op == CONSTANT_MULTIPLY_OP:
-        kwargs.update(we=we, wf=wf)
-        luts = eval_operator(op, op_params=kwargs).get('value')
+        return eval_operator(F_FPConstMult, op_params=kwargs
+            ).get('value')
     elif op == FMA_OP:
         MaxMSB_in = 0
         LSB_acc = -wf-1
         MSB_acc = 1
-        DSPThreshold = 0.9
 
         luts = eval_operator(F_DotProduct,
-            # DotProduct wE wFX wFY MaxMSB_in LSB_acc MSB_acc DSPThreshold
-            op_args=[we, wf, wf, MaxMSB_in, LSB_acc, MSB_acc, DSPThreshold]
+            op_params=dict(
+                we=we, 
+                wf=wf,
+                MaxMSB_in=MaxMSB_in,
+                LSB_acc=LSB_acc,
+                MSB_acc=MSB_acc)
             ).get('value')
         luts += eval_operator(F_LongAcc,
-            # LongAcc wE_in wF_in MaxMSB_in LSB_acc MSB_acc
-            op_args=[we, wf, MaxMSB_in, LSB_acc, MSB_acc]
+            op_params=dict(
+                we=we, 
+                wf=wf,
+                MaxMSB_in=MaxMSB_in,
+                LSB_acc=LSB_acc,
+                MSB_acc=MSB_acc)
             ).get('value')        
         luts += eval_operator(F_LongAcc2FP,
-            # LongAcc2FP LSB_acc MSB_acc wE_out wF_out
-            op_args=[LSB_acc, MSB_acc, we, wf]
-            ).get('value')        
+            op_params=dict(
+                LSB_acc=LSB_acc, 
+                MSB_acc=MSB_acc,
+                we=we,
+                wf=wf)
+            ).get('value')
     else:
-        # non-dynamic operators with stored area info
-        assert op in _op_luts, '{} not in collection of length {}'.format(
-            op, len(_op_luts))
-        luts = _impl(_op_luts[op], we, wf)
+        raise ValueError('Area info for {!r} not found'.format(op))
     return luts
 
 
@@ -362,7 +464,7 @@ if __name__ == '__main__':
     from soap.expr import Expr
     logger.set_context(level=logger.levels.debug)
     if 'synth' in sys.argv:
-        save(directory + 'area.add3.pkl', batch_synth(we_range, wf_range))
+        save(directory + 'area.add3.pkl', batch_synth(we_range, wf_range), do_format=True)
     else:
         p = 23
         e = Expr('a + b + c')
