@@ -86,6 +86,13 @@ custom_benchmarks_dict = {
 }
 
 basics_dict = {
+    # 'a + b + c'
+    # '(a * b) + c'
+    # 'a * 2'
+    # 'a * 0.2'
+    # 'a * 3.1415926535897932384626433832795'
+    # 'a * pi'
+    # ??
 }
 
 # only include from benchmark suites
@@ -93,16 +100,61 @@ basics_dict = {
 benchmarks_dict = dict(polybench_dict)
 benchmarks_dict.update(livermore_dict)
 
-# include custom too in all
+# include basics and custom in all
 all_benchmarks_dict = dict(benchmarks_dict)
 all_benchmarks_dict.update(**custom_benchmarks_dict, **basics_dict)
 
 # dict of dicts to dict of BenchmarkExprs
-benchmarks = {}
-custom_benchmarks = {}
-for name in benchmarks_dict:
-    benchmarks[name] = BenchmarkExpr(**benchmarks_dict[name], name=name)
-for name in custom_benchmarks_dict:
-    custom_benchmarks[name] = BenchmarkExpr(**custom_benchmarks_dict[name], name=name)
+def _convert_from_dict(dictionary):
+    result = {}
+    for name in dictionary:
+        result[name] = BenchmarkExpr(**dictionary[name], name=name)
+    return result
+
+polybench_benchmarks = _convert_from_dict(polybench_dict)
+livermore_benchmarks = _convert_from_dict(livermore_dict)
+benchmarks = dict(polybench_benchmarks)
+benchmarks.update(livermore_benchmarks)
+number_in_benchmark_suites = len(benchmarks)
+
+custom_benchmarks = _convert_from_dict(custom_benchmarks_dict)
+basics_benchmarks = _convert_from_dict(basics_dict)
+
 all_benchmarks = dict(benchmarks)
-all_benchmarks.update(custom_benchmarks)
+all_benchmarks.update(**custom_benchmarks, **basics_benchmarks)
+
+def get_by_name(names):
+    def filter_dict_for_key(dictionary, name):
+        return {name: dictionary[name]}
+
+    if isinstance(names, str):
+        names = names.split(',')
+        # if names is still just a string, return
+        if isinstance(names, str):
+            return filter_dict_for_key(all_benchmarks, names)
+    # lower-case everything
+    names = list(map(lambda s:s.lower(), names))
+    if 'all' in names or 'a' in names:
+        return all_benchmarks
+    result = {}
+    for name in names:
+        if name in ('custom', 'c'):
+            result.update(custom_benchmarks)
+        elif name in ('polybench', 'p'):
+            result.update(polybench_benchmarks)
+        elif name in ('livermore', 'l'):
+            result.update(livermore_benchmarks)
+        elif name in ('basics', 'basic'):
+            result.update(basics_benchmarks)
+        elif name in ('suite', 'suites', 's', 'benchmarks'):
+            result.update(benchmarks)
+        else:
+            try:
+                result.update(filter_dict_for_key(all_benchmarks, name))
+            except KeyError:
+                error_message = '{!r} not found'.format(name)
+                if len(names) == 1:
+                    raise KeyError(error_message)
+                else:
+                    print(error_message)
+    return result

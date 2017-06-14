@@ -34,88 +34,19 @@ def improvements(old, new, old_duration=None, new_duration=None):
     }
 
 
-def _is_better_frontier_than(first, second):
-    """Takes in a set of tuples containing area and error (order is irrelevant but should be consistent).
-    Returns a tuple in the form (bool1, set1, set2):
-        if first is entirely better than second, set a tuple .......
-
-    Goal is minimisation.
-    """
-    if not first:
-        if not second:
-            # first is as good as second
-            return True, set(), set()
-        else:
-            # second has what first has and additional Pareto-optimal points
-            return False, set(), second
-    if not second:
-        # first has what second has and additional Pareto-optimal points
-        return True, first, set()
-
-    first = sorted(list(first))
-    second = sorted(list(second))
-    better_first, better_second = set(), set()
-
-    first_is_better = True
-    len_first, len_second = len(first), len(second)
-    index_first, index_second = 0, 0
-    while True:
-        print(index_first, index_second, better_first, better_second)
-        if index_first >= len_first:
-            # TODO: handle the remaining elements in second
-            #better_second.union(set(first[index_second:]))
-            break
-        if index_second >= len_second:
-            # TODO: edge case for last index_second
-            better_first.union(set(first[index_first:]))
-            break
-        this_first_is_better = True
-        tup_first = first[index_first]
-        tup_second = second[index_second]
-        index_first += 1
-        
-        # if x match, compare y
-        # first has to not be above
-        if tup_first[0] == tup_second[0]:
-            if tup_first[1] > tup_second[1]:
-                this_first_is_better = False
-            # same
-            elif tup_first[1] == tup_second[1]:
-                continue
-        # if y match, compare x
-        # first has to not be to the right
-        elif tup_first[1] == tup_second[1]:
-            # at this point, tup_first[0] != tup_second[0]:
-            if tup_first[0] > tup_second[0]:
-                this_first_is_better = False
-        # if positive gradient between them
-        elif tup_first[0] > tup_second[0]:
-            if tup_first[1] > tup_second[1]:
-                this_first_is_better = False
-            # not sufficient info, advance second
-            else:
-                index_second += 1
-                continue
-        # at this point, the following is True
-        # tup_first[0] < tup_second[0] and tup_first[1] != tup_second[1]
-        elif tup_first[1] < tup_second[1]: # and tup_first[0] < tup_second[0]
-            this_first_is_better = False
-            
-        if this_first_is_better:
-            better_first.add(tup_first)
-        else:
-            first_is_better = False
-            better_second.add(tup_second)
-        # go to the next first 
-
-    return first_is_better, better_first, better_second
-
-
-is_better_frontier_than = _is_better_frontier_than
+def is_better_frontier_than(first, second):
+    from soap.analysis.core import pareto_frontier_2d
+    first, second = set(first), set(second)
+    best = set(pareto_frontier_2d(list(first.union(second))))
+    better_first = best - second
+    better_second = best - first
+    return (not better_second), better_first, better_second
 
 
 def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2, annotate=True,
-        transformation_depth=100):
+        transformation_depth=100, benchmarks='basics'):
+    benchmark_names = benchmarks
+
     import time
     import gmpy2
     from pprint import pprint
@@ -123,18 +54,19 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
     import soap.logger as logger
     from soap.common import invalidate_cache
     from soap.analysis import Plot
-    from soap.analysis.core import pareto_frontier_2d
     from soap.analysis.utils import plot, analyse, analyse_and_frontier
     from soap.expr import Expr
     import soap.semantics.flopoco as flopoco
     from soap.semantics.flopoco import wf_range
-    from soap.transformer.utils import greedy_frontier_closure, greedy_trace, frontier_trace, martel_trace
+    from soap.transformer.utils import (
+        greedy_frontier_closure, greedy_trace, frontier_trace, martel_trace
+    )
     from soap.transformer.biop import (
         BiOpTreeTransformer, FusedBiOpTreeTransformer, FusedOnlyBiOpTreeTransformer,
         Add3TreeTransformer, ConstMultTreeTransformer, FMATreeTransformer,
     )
 
-    from tests.benchmarks import all_benchmarks, benchmarks as _benchmarks
+    from tests.benchmarks import number_in_benchmark_suites, get_by_name as get_benchmarks
     from tests.fused.analysis import improvements, mins_of_analysis
     
     Expr.__repr__ = Expr.__str__
@@ -207,14 +139,13 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
 
     traces = (
         (frontier_trace, transformation_depth),
-        (greedy_trace, None)
-    )[1:]
+        (greedy_frontier_closure, None),
+        (greedy_trace, None),
+    )[2:]
 
     transformer_results = []
     
-    benchmarks = {k: all_benchmarks[k] for k in [
-        'seidel', '2d_hydro', 'fdtd_1', '_taylor_p', '_taylor_b'][:3]}
-    #benchmarks = _benchmarks
+    benchmarks = get_benchmarks(benchmark_names)
     for benchmark_name in benchmarks:
         logger.error('Running', benchmark_name)
         bench = benchmarks[benchmark_name]
@@ -230,7 +161,7 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                 frontier = []
                 title = e.replace('\n', '').replace('  ', '').strip()
                 if benchmark_name and benchmark_name[0] != '_':
-                    # '\texttt{2mm\_2}: d + (t * c)'
+                    # eg. '\texttt{2mm\_2}: d + (t * c)'
                     title = '\\texttt{{{name}}}: {expr}'.format(
                         name=benchmark_name.replace('_', '\_'), expr=title)
                 p = Plot(var_env=v, blocking=False, title=title)#,legend_pos='top right')
@@ -279,7 +210,7 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                         z[0], z[1])
                     if missing_plots:
                         logger.error('Fused is missing:', missing_plots)
-                    print('Fused contains:', fused_plots)
+                    print('Fused discovered:', fused_plots)
 
                 if vary_precision:
                     p.add_analysis(t, legend='varying precision', linestyle=':',
@@ -324,7 +255,7 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
         transformation_depth=transformation_depth,
         traces=tuple(map(lambda t:t[0].__name__, traces))))
 
-    if len(benchmarks) > len(_benchmarks):
+    if len(benchmarks) > number_in_benchmark_suites:
         print('Heads up! You are running more than just the standard benchmark suites.')
 
     input('\nPress Enter to continue...')
