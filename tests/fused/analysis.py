@@ -34,7 +34,88 @@ def improvements(old, new, old_duration=None, new_duration=None):
     }
 
 
-def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2, annotate=True):
+def _is_better_frontier_than(first, second):
+    """Takes in a set of tuples containing area and error (order is irrelevant but should be consistent).
+    Returns a tuple in the form (bool1, set1, set2):
+        if first is entirely better than second, set a tuple .......
+
+    Goal is minimisation.
+    """
+    if not first:
+        if not second:
+            # first is as good as second
+            return True, set(), set()
+        else:
+            # second has what first has and additional Pareto-optimal points
+            return False, set(), second
+    if not second:
+        # first has what second has and additional Pareto-optimal points
+        return True, first, set()
+
+    first = sorted(list(first))
+    second = sorted(list(second))
+    better_first, better_second = set(), set()
+
+    first_is_better = True
+    len_first, len_second = len(first), len(second)
+    index_first, index_second = 0, 0
+    while True:
+        print(index_first, index_second, better_first, better_second)
+        if index_first >= len_first:
+            # TODO: handle the remaining elements in second
+            #better_second.union(set(first[index_second:]))
+            break
+        if index_second >= len_second:
+            # TODO: edge case for last index_second
+            better_first.union(set(first[index_first:]))
+            break
+        this_first_is_better = True
+        tup_first = first[index_first]
+        tup_second = second[index_second]
+        index_first += 1
+        
+        # if x match, compare y
+        # first has to not be above
+        if tup_first[0] == tup_second[0]:
+            if tup_first[1] > tup_second[1]:
+                this_first_is_better = False
+            # same
+            elif tup_first[1] == tup_second[1]:
+                continue
+        # if y match, compare x
+        # first has to not be to the right
+        elif tup_first[1] == tup_second[1]:
+            # at this point, tup_first[0] != tup_second[0]:
+            if tup_first[0] > tup_second[0]:
+                this_first_is_better = False
+        # if positive gradient between them
+        elif tup_first[0] > tup_second[0]:
+            if tup_first[1] > tup_second[1]:
+                this_first_is_better = False
+            # not sufficient info, advance second
+            else:
+                index_second += 1
+                continue
+        # at this point, the following is True
+        # tup_first[0] < tup_second[0] and tup_first[1] != tup_second[1]
+        elif tup_first[1] < tup_second[1]: # and tup_first[0] < tup_second[0]
+            this_first_is_better = False
+            
+        if this_first_is_better:
+            better_first.add(tup_first)
+        else:
+            first_is_better = False
+            better_second.add(tup_second)
+        # go to the next first 
+
+    return first_is_better, better_first, better_second
+
+
+is_better_frontier_than = _is_better_frontier_than
+
+
+def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2, annotate=True,
+        transformation_depth=100):
     import time
     import gmpy2
     from pprint import pprint
@@ -124,10 +205,16 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
         (FMATreeTransformer, 'only fma fusing'),
     )[:2]
 
+    traces = (
+        (frontier_trace, transformation_depth),
+        (greedy_trace, None)
+    )[1:]
+
     transformer_results = []
     
-    benchmarks = _benchmarks
-    #benchmarks = {k: all_benchmarks[k] for k in ['seidel', 'fdtd_1', 'taylor_p', 'taylor_b'][:1]}
+    benchmarks = {k: all_benchmarks[k] for k in [
+        'seidel', '2d_hydro', 'fdtd_1', '_taylor_p', '_taylor_b'][:3]}
+    #benchmarks = _benchmarks
     for benchmark_name in benchmarks:
         logger.error('Running', benchmark_name)
         bench = benchmarks[benchmark_name]
@@ -136,22 +223,24 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
         logger.info('Expr:', str(t))
         logger.info('Tree:', t.tree())
 
-        for trace_ in (
-            (frontier_trace, 3),
-            (greedy_trace, None))[1:]:
+        for trace_ in traces:
             
             for action in (actions, actions[::-1])[:1]: # forwards or backwards
                 z = []
                 frontier = []
                 title = e.replace('\n', '').replace('  ', '').strip()
-                p = Plot(depth=3, var_env=v, blocking=False, title=title)#,legend_pos='top right')
+                if benchmark_name and benchmark_name[0] != '_':
+                    # '\texttt{2mm\_2}: d + (t * c)'
+                    title = '\\texttt{{{name}}}: {expr}'.format(
+                        name=benchmark_name.replace('_', '\_'), expr=title)
+                p = Plot(var_env=v, blocking=False, title=title)#,legend_pos='top right')
                 
                 for transformer_index, action_tuple in enumerate(action):
                     Transformer, label = action_tuple
                     if timing:
                         invalidate_cache()
                     duration = time.time()
-                    #s = Transformer(t, depth=3).closure()
+                    s = Transformer(t, depth=transformation_depth).closure()
                     s = trace_[0](t, v, depth=trace_[1], transformer=Transformer)
                     unfiltered, frontier = analyse_and_frontier(s, v, prec=precision)
                     duration = time.time() - duration # where to put this?
@@ -161,14 +250,14 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                     
                     if len(frontier) <= 1:
                         # plot non-frontier points too
-                        frontier_ = unfiltered
+                        frontier_to_plot = unfiltered
                     else:
-                        frontier_ = frontier
+                        frontier_to_plot = frontier
                     
-                    logger.info(frontier_)
+                    logger.info(frontier_to_plot)
                     linestyle = '--' if transformer_index == 0 else '-'
-                    # plot(frontier_, blocking=False)
-                    p.add(frontier_,
+                    # plot(frontier_to_plot, blocking=False)
+                    p.add(frontier_to_plot,
                         legend=label, time=duration, annotate=annotate, linestyle=linestyle,
                         annotate_kwargs={'fontsize': 10})
                     z.append(set(map(
@@ -177,6 +266,7 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                     
                     # Analyse the frontier for improvements
                     if transformer_index == 0:
+                        original_frontier = frontier
                         original_mins = mins_of_analysis(frontier)
                         original_duration = duration
                     else:
@@ -184,11 +274,12 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                             original_duration, duration)
                         transformer_results.append([Transformer.__name__, benchmark_name, imp_dict])
 
-                if len(z) >= 2:
-                    missing_plots = z[0]-z[1]
+                if len(z) >= 2: # or if in loop then transformer_index == 1:
+                    fused_success, missing_plots, fused_plots = is_better_frontier_than(
+                        z[0], z[1])
                     if missing_plots:
                         logger.error('Fused is missing:', missing_plots)
-                    logger.info('Fused contains:', z[1]-z[0])
+                    print('Fused contains:', fused_plots)
 
                 if vary_precision:
                     p.add_analysis(t, legend='varying precision', linestyle=':',
@@ -229,10 +320,12 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
     else:
         logger.error('No transformer comparison made.')
 
-    print('\n', dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks)))
+    print('\n', dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks),
+        transformation_depth=transformation_depth,
+        traces=tuple(map(lambda t:t[0].__name__, traces))))
 
     if len(benchmarks) > len(_benchmarks):
-        print('Heads up! You are running more than just the standard benchmark suites')
+        print('Heads up! You are running more than just the standard benchmark suites.')
 
     input('\nPress Enter to continue...')
 

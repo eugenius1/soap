@@ -29,8 +29,9 @@ class BenchmarkExpr(object):
     __str__ = __repr__
         
 
+# A benchmark names starting with _ (an underscore) means its name will be hidden
 custom_benchmarks_dict = {
-    'filter': {
+    '_filter': {
         'e': 'a0 * y0 + a1 * y1 + a2 * y2 + b0 * x0 + b1 * x1 + b2 * x2',
         'v': {
             'x0': [0.0, 1.0],
@@ -47,14 +48,14 @@ custom_benchmarks_dict = {
             'b2': [0.0, 0.1]
         }
     },
-    'taylor_b': {
+    '_taylor_b': {
         'e': 'b * (2 * i + 1) * (2 * i)',
         'v': {
             'b': [0, 7e48], # ~ product of (4*i^2) from i=1 to 20 is (4^20 * (20!)^2)
             'i': [1, 20],
         }
     },
-    'taylor_p': {
+    '_taylor_p': {
         'e': 'p * (x + y) * (x + y)',
         'v': {
             'p': [0, 1.21**40], # (x+y)^20 ~ 2048
@@ -62,7 +63,7 @@ custom_benchmarks_dict = {
             'y': [0, 1],
         }
     },
-    'seidel_adds': {
+    '_seidel_adds': {
         'e': '(a+b+c+d+e)',
         'v': {
             'a': [0, 1],
@@ -72,7 +73,7 @@ custom_benchmarks_dict = {
             'e': [0, 1],
         }
     },
-    'seidel_var': {
+    '_seidel_var': {
         'e': 'a+b',
         'v': {
             'a': [0, 1],
@@ -84,6 +85,9 @@ custom_benchmarks_dict = {
     },
 }
 
+basics_dict = {
+}
+
 # only include from benchmark suites
 # copying
 benchmarks_dict = dict(polybench_dict)
@@ -91,9 +95,9 @@ benchmarks_dict.update(livermore_dict)
 
 # include custom too in all
 all_benchmarks_dict = dict(benchmarks_dict)
-all_benchmarks_dict.update(custom_benchmarks_dict)
+all_benchmarks_dict.update(**custom_benchmarks_dict, **basics_dict)
 
-# dict of dicts to dict of BenchmarkExpr's
+# dict of dicts to dict of BenchmarkExprs
 benchmarks = {}
 custom_benchmarks = {}
 for name in benchmarks_dict:
