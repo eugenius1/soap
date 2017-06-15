@@ -29,14 +29,86 @@ template_file = directory + 'template.vhdl'
 device_name = 'Virtex6'
 device_model = 'xc6vlx760'
 
-# Flopoco command line names
+flopoco_2_5_0 = '2.5.0'
+flopoco_4_1 = '4.1' # currently fails in xst with most of the ops
+flopoco_main_version = flopoco_2_5_0
+flopoco_version = flopoco_2_5_0
+flopoco_generate_figures = False
+
+# SOAP-internal representations of flopoco operators
+# they don't have to match the flopoco names thanks to the mapping below
 F_DotProduct = 'DotProduct'
 F_LongAcc = 'LongAcc'
 F_LongAcc2FP = 'LongAcc2FP'
 F_FPConstMult = 'FPConstMult'
-flopoco_ops = [F_DotProduct, F_LongAcc, F_LongAcc2FP, F_FPConstMult]
+F_FPConstMultRational = 'FPConstMultRational' ##### ? in 2.5.0 ?
+
+flopoco_op_mapping = {
+    flopoco_2_5_0: {
+        ADD_OP :'FPAdder',
+        MULTIPLY_OP: 'FPMultiplier',
+        ADD3_OP: 'FPAdder3Input',
+        CONSTANT_MULTIPLY_OP: 'FPConstMult',
+        F_DotProduct: 'DotProduct',
+        F_LongAcc: 'LongAcc',
+        F_LongAcc2FP: 'LongAcc2FP',
+    },
+    flopoco_4_1: {
+        ADD_OP: 'FPAdd',
+        MULTIPLY_OP: 'FPMult',
+        ADD3_OP: 'FPAdd3Input',
+        CONSTANT_MULTIPLY_OP: 'FPConstMult',
+        F_DotProduct: 'FPDotProduct',
+        F_LongAcc: 'FPLargeAcc', # currently broken
+        F_LongAcc2FP: 'LargeAccToFP',
+    }
+}
+
+flopoco_args_mapping = {
+    flopoco_2_5_0: {
+        # wE wF
+        'FPAdder': ('{we}', '{wf}'),
+        # wE wF_in wF_out
+        'FPMultiplier': ('{we}', '{wf}', '{wf}'),
+        'FPAdder3Input': ('{we}', '{wf}'),
+        # wE_in wF_in wE_out wF_out wC constant_expr
+        'FPConstMult': ('{we}', '{wf}', '{we}', '{wf}', '{wc}', '{constant}'),
+        # wE wFX wFY MaxMSB_in LSB_acc MSB_acc DSPThreshold
+        'DotProduct': ('{we}', '{wf}', '{wf}', '{MaxMSB_in}', '{LSB_acc}', '{MSB_acc}', '{DSPThreshold}'),
+        # wE_in wF_in MaxMSB_in LSB_acc MSB_acc
+        'LongAcc': ('{we}', '{wf}', '{MaxMSB_in}', '{LSB_acc}', '{MSB_acc}'),
+        # LSB_acc MSB_acc wE_out wF_out
+        'LongAcc2FP': ('{LSB_acc}', '{MSB_acc}', '{we}', '{wf}'),
+    },
+    flopoco_4_1: {
+        # wE wF [sub dualPath]
+        'FPAdd': ('wE={we}', 'wF={wf}'),
+        # wE wF [wFout]
+        'FPMult': ('wE={we}', 'wF={wf}', 'wFout={wf}'),
+        'FPAdd3Input': ('wE={we}', 'wF={wf}'),
+        # wE_in wF_in wE_out wF_out constant [cst_width]
+        'FPConstMult': (
+            'wE_in={we}', 'wF_in={wf}', 'wE_out={we}', 'wF_out={wf}', 'constant={constant}', 'cst_width={wc}'),
+        'FPDotProduct': (
+            'wE={we}', 'wFX={wf}', 'wFY={wf}', 'MaxMSBX={MaxMSB_in}', 'MSBA={MSB_acc}', 'LSBA={LSB_acc}'),
+        'FPLargeAcc': (
+            'wEX={we}', 'wFX={wf}', 'MaxMSBX={MaxMSB_in}', 'MSBA={MaxMSB_acc}', 'LSBA={LSB_acc}'),
+        'LargeAccToFP': (
+            'wE_out={we}', 'wF_out={wf}', 'MSBA={MSB_acc}', 'LSBA={LSB_acc}'),
+    }
+}
 
 use_area_dynamic_cache = True
+
+
+def sh_flopoco(*args, version=None, **kwargs):
+    import sh
+    version = version or flopoco_version
+    if version == flopoco_4_1:
+        return sh.flopoco_4_1(*args, **kwargs)
+    else:
+        return sh.flopoco(*args, **kwargs)
+
 
 @contextmanager
 def cd(d):
@@ -63,37 +135,15 @@ def get_luts(file_name):
         return int(luts.get('value'))
 
 
-def return_lists_of_lists(func):
-    """Function decorator to ensure the output is a list with a nested list.
-    Assumes the first element of the outer list is a good indicator for nested lists,
-    i.e. doesn't check every element of the outer loop for a nested list.
-    """
-    def call(*args, **kwargs):
-        output = func(*args, **kwargs)
-        if not isinstance(output, list):
-            output = list(output)
-        if not isinstance(output[0], list):
-            output = list(map(list, output))
-        return output
-    return functools.wraps(func)(call)
-
-
 def flopoco_command_args(fop, **kwargs):
-    """Returns a list of lists.
-    Nested list contains the arguments with the flopoco op as the first one.
+    """Returns a list of arguments.
     """
-    # raises KeyError if not given
-    if fop not in flopoco_ops:
-        raise ValueError('Unrecognised op {!r}'.format(fop))
+    if fop not in flopoco_op_mapping[flopoco_version].values():
+        raise ValueError('Unrecognised op {!r} for flopoco {}'.format(fop, flopoco_version))
 
-    we = kwargs['we']
-    wf = kwargs['wf']
-    DSPThreshold = kwargs.get('DSPThreshold', 0.9)
-    if fop == F_FPConstMult:
-        constant = str(kwargs['constant'])
-        wc = kwargs.get('wc', 0)
-        # wE_in wF_in wE_out wF_out wC constant_expr
-        return [F_FPConstMult, we, wf, we, wf, wc, constant]
+    kwargs.setdefault('DSPThreshold', 0.9)
+    if fop == flopoco_op_mapping[flopoco_version][CONSTANT_MULTIPLY_OP]:
+        kwargs.setdefault('wc', 0)
 
         # alternatively, use rational constant multiplier
         # from soap.semantics.common import mpq
@@ -102,21 +152,8 @@ def flopoco_command_args(fop, **kwargs):
         # flopoco_cmd += ['FPConstMultRational', we, wf, we, wf,
         #     str(rational.numerator), str(rational.denominator)]
     
-    # Dot Product and Accumulator
-    elif fop in (F_DotProduct, F_LongAcc, F_LongAcc2FP):
-        LSB_acc = kwargs['LSB_acc']
-        MSB_acc = kwargs['MSB_acc']
-        if fop == F_LongAcc2FP:
-            # LongAcc2FP LSB_acc MSB_acc wE_out wF_out
-            return [F_LongAcc2FP, LSB_acc, MSB_acc, we, wf]
-        MaxMSB_in = kwargs['MaxMSB_in']
-        if fop == F_DotProduct:
-            # DotProduct wE wFX wFY MaxMSB_in LSB_acc MSB_acc DSPThreshold
-            return [F_DotProduct, we, wf, wf, MaxMSB_in, LSB_acc, MSB_acc, DSPThreshold]
-        if fop == F_LongAcc:
-            # LongAcc wE_in wF_in MaxMSB_in LSB_acc MSB_acc
-            return [F_LongAcc, we, wf, MaxMSB_in, LSB_acc, MSB_acc]
-
+    return [fop, *map(lambda a:a.format(**kwargs), flopoco_args_mapping[flopoco_version][fop])]
+    
 
 def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
     import sh
@@ -126,15 +163,21 @@ def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
     if wf == None and  'wf' in op_params:
         wf = op_params['wf']
 
+    option_prefix = '-' if flopoco_version == flopoco_2_5_0 else ''
     flopoco_cmd = []
-    flopoco_cmd += ['-target=' + device_name]
+    flopoco_cmd += [option_prefix + 'target=' + device_name]
     dir = dir or tempfile.mkdtemp(prefix='soap_', suffix='/')
     logger.debug(dir)
     with cd(dir):
         if f is None:
             _, f = tempfile.mkstemp(suffix='.vhdl', dir=dir)
             logger.debug(type(f), f)
-        flopoco_cmd += ['-outputfile=%s' % f]
+        # `outputfile` and other option names are case-insensitive
+        flopoco_cmd += [option_prefix + 'outputfile={filepath}'.format(filepath=f)]
+        if flopoco_version == flopoco_4_1:
+            # generateFigures=<0|1>:generate SVG graphics
+            flopoco_cmd += ['generateFigures={}'.format(int(flopoco_generate_figures))]
+            flopoco_cmd += ['plainVHDL=0']
         if op == 'add' or op == ADD_OP:
             flopoco_cmd += ['FPAdder', we, wf]
         elif op == 'mul' or op == MULTIPLY_OP:
@@ -143,14 +186,14 @@ def flopoco(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
             flopoco_cmd += ['FPAdder3Input', we, wf]
         elif op == CONSTANT_MULTIPLY_OP:
             flopoco_cmd += flopoco_command_args(F_FPConstMult, **op_params)
-        elif op in flopoco_ops:
+        elif op in flopoco_op_mapping[flopoco_version].values():
             if op_args == None:
                 raise ValueError('Expecting a Sequence of op_args for the op {}'.format(op))
             flopoco_cmd += [op, *op_args]
         else:
             raise ValueError('Unrecognised operator %s' % str(op))
         logger.debug('Flopoco', flopoco_cmd)
-        logger.debug(sh.flopoco(*flopoco_cmd, _err_to_out=False))
+        logger.debug(sh_flopoco(*flopoco_cmd, _err_to_out=False))
         try:
             with open(f) as fh:
                 if not fh.read():
@@ -177,7 +220,7 @@ def xilinx(f, dir=None):
 
 
 def eval_operator(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=None):
-    """TODO: what if op is not dynamic"""
+    """TODO: what if op is not dynamic and running this as part of _para_synth in batch_synth"""
     if op_args == None:
         if op_params:
             flopoco_args = flopoco_command_args(op, **op_params)
@@ -186,8 +229,13 @@ def eval_operator(op, we=None, wf=None, f=None, dir=None, op_params={}, op_args=
         else:
             logger.error('Warning: flopoco.eval_operator given empty op_args and empty op_params'.format(
                 op_args, op_params))
+    
     if use_area_dynamic_cache:
-        cache_key = (op, *op_args)
+        if flopoco_version != flopoco_main_version:
+            version = [flopoco_version]
+        else:
+            version = []
+        cache_key = (*version, op, *op_args)
 
     # check if in dynamic cache
     if use_area_dynamic_cache and cache_key in area_dynamic_cache:
@@ -323,19 +371,16 @@ def multiplier(we, wf):
 @cached
 @print_return('flopoco.')
 def luts_for_op(op, we=None, wf=None, **kwargs):
-    if op in _op_luts:
+    if flopoco_version == flopoco_main_version and op in _op_luts:
         return _impl(_op_luts[op], we, wf)
 
     kwargs.update(we=we, wf=wf)
-    if op == CONSTANT_MULTIPLY_OP:
-        return eval_operator(F_FPConstMult, op_params=kwargs
-            ).get('value')
-    elif op == FMA_OP:
+    if op == FMA_OP:
         MaxMSB_in = 0
         LSB_acc = -wf-1
         MSB_acc = 1
 
-        luts = eval_operator(F_DotProduct,
+        luts = eval_operator(flopoco_op_mapping[flopoco_version][F_DotProduct],
             op_params=dict(
                 we=we, 
                 wf=wf,
@@ -343,7 +388,7 @@ def luts_for_op(op, we=None, wf=None, **kwargs):
                 LSB_acc=LSB_acc,
                 MSB_acc=MSB_acc)
             ).get('value')
-        luts += eval_operator(F_LongAcc,
+        luts += eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc],
             op_params=dict(
                 we=we, 
                 wf=wf,
@@ -351,12 +396,17 @@ def luts_for_op(op, we=None, wf=None, **kwargs):
                 LSB_acc=LSB_acc,
                 MSB_acc=MSB_acc)
             ).get('value')        
-        luts += eval_operator(F_LongAcc2FP,
+        luts += eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc2FP],
             op_params=dict(
                 LSB_acc=LSB_acc, 
                 MSB_acc=MSB_acc,
                 we=we,
                 wf=wf)
+            ).get('value')
+    # ops that only run one flopoco command
+    elif op in (ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP):
+        return eval_operator(flopoco_op_mapping[flopoco_version][op],
+            op_params=kwargs
             ).get('value')
     else:
         raise ValueError('Area info for {!r} not found'.format(op))

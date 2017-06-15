@@ -158,7 +158,8 @@ def _log_margin(lmin, lmax):
 class Plot(object):
     """Provides plotting of results"""
     def __init__(self, result=None, var_env=None, depth=None, precs=None,
-                 log=None, legend_pos=None, blocking=True, title=None, **kwargs):
+                 log=None, legend_pos=None, blocking=True, title=None,
+                 precision_frontier=False, **kwargs):
         """Initialisation.
 
         :param result: results provided by :func:`analyse`.
@@ -190,11 +191,13 @@ class Plot(object):
             self.log_enable = log
         self.blocking = blocking
         self.title = title
+        self.precision_frontier = precision_frontier
         super().__init__()
 
     def add_analysis(self, expr, func=None, precs=None, var_env=None,
                      depth=None, annotate=False, legend=None,
-                     legend_depth=False, legend_time=False, **kwargs):
+                     legend_depth=False, legend_time=False,
+                     precision_frontier=None, **kwargs):
         """Performs transforms, then analyses expressions and add results to
         plot.
         
@@ -244,7 +247,7 @@ class Plot(object):
             front = True
             marker = 'x'
         else:
-            front = False
+            front = precision_frontier if precision_frontier != None else self.precision_frontier
             marker = 'o'
         depth = d if legend_depth else None
         duration = t if legend_time else None

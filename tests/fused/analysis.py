@@ -44,7 +44,7 @@ def is_better_frontier_than(first, second):
 
 
 def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2, annotate=True,
-        transformation_depth=100, benchmarks='basics'):
+        transformation_depth=100, benchmarks='seidel,fdtd_1'):
     benchmark_names = benchmarks
 
     import time
@@ -198,8 +198,8 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                     # Analyse the frontier for improvements
                     if transformer_index == 0:
                         original_frontier = frontier
-                        original_mins = mins_of_analysis(frontier)
                         original_duration = duration
+                        original_mins = mins_of_analysis(frontier)
                     else:
                         imp_dict = improvements(original_mins, mins_of_analysis(frontier),
                             original_duration, duration)
@@ -213,12 +213,33 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                     print('Fused discovered:', fused_plots)
 
                 if vary_precision:
-                    p.add_analysis(t, legend='varying precision', linestyle=':',
-                        precs=list(range(
-                            precision-precision_delta,
-                            precision+precision_delta+1)
+                    linestyle = ':'
+                    marker = ','
+                    p.add_analysis(t,
+                            legend='varying precision of original expression',
+                            linestyle=linestyle, s=30,
+                            precision_frontier=True,
+                            precs=list(range(
+                                precision-precision_delta,
+                                precision+precision_delta+1)
+                            ),
                         )
-                    )
+                    legend_kwarg = {
+                        'legend': 'varying precision of fused frontier'
+                    }
+                    for index_pf, expr in enumerate(map(lambda d: Expr(d['expression']), frontier)):
+                        p.add_analysis(expr,
+                            linestyle=linestyle, s=30,
+                            precision_frontier=True,
+                            color_group='frontier_precision',
+                            precs=list(range(
+                                precision-precision_delta,
+                                precision+precision_delta+1)
+                            ),
+                            **legend_kwarg
+                        )
+                        if index_pf == 0:
+                            legend_kwarg = {}
                 p.add_analysis(t, legend='original expression', s=300, precs=[precision])
                 p.show()
                 # end for transformer_index, action_tuple
