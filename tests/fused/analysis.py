@@ -49,7 +49,7 @@ def is_better_frontier_than(first, second):
 
 def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=2, annotate=False,
         transformation_depth=1000, expand_singular_frontiers=True, precision='s',
-        algorithm='g', compare_with_soap3=True,
+        algorithm='c', compare_with_soap3=False,
         benchmarks='seidel',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
@@ -77,7 +77,8 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
     from tests.fused.analysis import improvements, mins_of_analysis
     
     Expr.__repr__ = Expr.__str__
-    logger.set_context(level=logger.levels.error)
+    logger.set_context(level=logger.levels.debug)
+    flopoco.use_area_dynamic_cache = use_area_cache
 
     # wf excludes the leading 1 in the mantissa/significand
     standard_precs = {
@@ -93,8 +94,6 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
             }.get(precision, precision)
 
         precision = standard_precs.get(precision, standard_precs['single'])
-
-    flopoco.use_area_dynamic_cache = use_area_cache
 
     e = '(a + b) + c'
     e_cm = '3 * a * 2'
@@ -160,7 +159,7 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
     }
     if algorithm not in ('a', 'all'):
         if algorithm not in traces.keys():
-            algorithm = {'f': 'frontier', 'gf': 'greedy_frontier', 'g': 'greedy', 'c': 'closure',
+            algorithm = {'f': 'frontier', 'gf': 'greedy_frontier', 'fg': 'greedy_frontier', 'g': 'greedy', 'c': 'closure',
                 }.get(algorithm, 'greedy_frontier')
         traces = {algorithm: traces[algorithm]}
 
@@ -169,7 +168,8 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
     
     benchmarks = get_benchmarks(benchmark_names)
     for benchmark_name in benchmarks:
-        logger.error('Running', benchmark_name)
+        print('Running ', end='')
+        logger.error(benchmark_name)
         bench = benchmarks[benchmark_name]
         e, v = bench.expr_and_vars()
         t = Expr(e)
@@ -390,7 +390,38 @@ soap3_results = {
                 'error': 2.175569875362271e-07,
                 'expression': '((((a + b) + c) + d) + e) * 0.2'
             },
-        ]
+        ],
+        'loop': {
+            'original': {
+                'area': 603,
+                'error': 1.0681659659894649e-05,
+            },
+            'analysis': {
+            },
+            'vary_precision': [
+                # all areas come out the same unless Virtex6 luts are used
+                { # 21
+                    'area': 603, # 3303
+                    'error': 4.272656224202365e-05,
+                },
+                { # 22
+                    'area': 603, # 3417
+                    'error': 2.282651257701218e-05,
+                },
+                { # 23
+                    'area': 603, # 3518
+                    'error': 1.0681659659894649e-05,
+                },
+                { # 24
+                    'area': 603, # 3707
+                    'error': 5.706639285563142e-06,
+                },
+                { # 25
+                    'area': 603, # 3785
+                    'error': 2.6704132096710964e-06,
+                },
+            ],
+        }
     }
 }
 

@@ -35,6 +35,9 @@ flopoco_main_version = flopoco_2_5_0
 flopoco_version = flopoco_2_5_0
 flopoco_generate_figures = False
 
+use_area_dynamic_cache = True
+fma_includes_conversion_to_fp = True
+
 # SOAP-internal representations of flopoco operators
 # they don't have to match the flopoco names thanks to the mapping below
 F_DotProduct = 'DotProduct'
@@ -97,8 +100,6 @@ flopoco_args_mapping = {
             'wE_out={we}', 'wF_out={wf}', 'MSBA={MSB_acc}', 'LSBA={LSB_acc}'),
     }
 }
-
-use_area_dynamic_cache = True
 
 
 def sh_flopoco(*args, version=None, **kwargs):
@@ -388,21 +389,14 @@ def luts_for_op(op, we=None, wf=None, **kwargs):
                 LSB_acc=LSB_acc,
                 MSB_acc=MSB_acc)
             ).get('value')
-        luts += eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc],
-            op_params=dict(
-                we=we, 
-                wf=wf,
-                MaxMSB_in=MaxMSB_in,
-                LSB_acc=LSB_acc,
-                MSB_acc=MSB_acc)
-            ).get('value')        
-        luts += eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc2FP],
-            op_params=dict(
-                LSB_acc=LSB_acc, 
-                MSB_acc=MSB_acc,
-                we=we,
-                wf=wf)
-            ).get('value')
+        if fma_includes_conversion_to_fp:
+            luts += eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc2FP],
+                op_params=dict(
+                    LSB_acc=LSB_acc, 
+                    MSB_acc=MSB_acc,
+                    we=we,
+                    wf=wf)
+                ).get('value')
     # ops that only run one flopoco command
     elif op in (ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP):
         return eval_operator(flopoco_op_mapping[flopoco_version][op],
