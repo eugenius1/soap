@@ -36,7 +36,7 @@ flopoco_version = flopoco_2_5_0
 flopoco_generate_figures = False
 
 use_area_dynamic_cache = True
-fma_includes_conversion_to_fp = True
+fma_includes_conversion_to_fp = False
 
 # SOAP-internal representations of flopoco operators
 # they don't have to match the flopoco names thanks to the mapping below

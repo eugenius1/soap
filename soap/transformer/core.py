@@ -93,7 +93,6 @@ class TreeTransformer(object):
         self.reduction_methods = list(self.__class__.reduction_methods or [])
         super().__init__()
 
-    @print_return()
     def _harvest(self, trees):
         """Crops all trees at the depth limit."""
         if self._d >= RECURSION_LIMIT:
@@ -109,7 +108,6 @@ class TreeTransformer(object):
             self._n.update(e)
         return cropped
 
-    @print_return()
     def _seed(self, trees):
         """Stitches all trees."""
         logger.debug('Seeding trees.')
@@ -151,7 +149,6 @@ class TreeTransformer(object):
         r = union(r, cpu_count)
         return s, r
 
-    @print_return()
     def _closure_r(self, trees, reduced=False):
         """Transitive closure algorithm."""
         if self._d >= RECURSION_LIMIT and self.transform_methods:

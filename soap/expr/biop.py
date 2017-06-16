@@ -98,8 +98,8 @@ class Expr(Comparable, Flyweight):
         """Returns the arguments of the expression"""
         return self.operands
 
+
     @cached
-    @print_return('Expr.')
     def error(self, var_env, prec):
         """Computes the error bound of its evaulation.
 
@@ -110,22 +110,9 @@ class Expr(Comparable, Flyweight):
             single precision.
         :type prec: int
         """
-        from soap.semantics import (
-            cast_error, cast_error_constant, precision_context
-        )
+        from soap.semantics import precision_context, error_for_operand
         with precision_context(prec):
-            def eval(a):
-                with ignored(AttributeError):
-                    return a.error(var_env, prec)
-                with ignored(TypeError, KeyError):
-                    return eval(var_env[str(a)])
-                with ignored(TypeError):
-                    return cast_error(*a)
-                with ignored(TypeError):
-                    return cast_error_constant(a)
-                return a
-            #e1, e2 = eval(self.a1), eval(self.a2)
-            errors = tuple(eval(o) for o in self.args)
+            errors = tuple(error_for_operand(o, var_env, prec) for o in self.args)
             if self.op == ADD_OP:
                 return errors[0] + errors[1]
             if self.op == MULTIPLY_OP:
@@ -146,18 +133,28 @@ class Expr(Comparable, Flyweight):
         :type prec: int
         """
         import math
+        from soap.common import standard_exponent_size_for, exponent_size_for_exponent
+        from soap.semantics.error import FloatInterval, error_for_operand
         from soap.semantics.flopoco import we_min
-        b = self.error(var_env, prec).v
-        bmax = max(abs(b.min), abs(b.max))
-        expmax = math.floor(math.log(bmax, 2))
-        try:
-            we = int(math.ceil(math.log(expmax + 1, 2) + 1))
-        except ValueError:
-            we = 1
+
+        bounds = self.error(var_env, prec).v
+        for arg in self.operands:
+            arg_bounds = error_for_operand(arg, var_env, prec).v
+            bounds.min = min(bounds.min, arg_bounds.min)
+            bounds.max = max(bounds.max, arg_bounds.max)
+        # if bounds cover infinitesimal numbers, fallback to IEEE standard
+        if (bounds.min <= 0 and bounds.max >= 0):
+            we = standard_exponent_size_for(prec)
+        else:
+            magnitudes_ = list(map(abs, bounds))
+            magnitudes = [min(magnitudes_), max(magnitudes_)]
+            # math.floor(x) returns the largest integer less than or equal to x
+            # so also correct for negative exponents
+            exp_bounds = map(lambda x: math.floor(math.log(x, 2)), magnitudes)
+            we = max(map(exponent_size_for_exponent, exp_bounds))
         return max(we, we_min)
 
     @cached
-    # @print_return('Expr.')
     def area(self, var_env, prec):
         """Computes the area estimation of its evaulation.
 

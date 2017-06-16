@@ -96,7 +96,6 @@ def two_add2_to_one_add3(t):
     return s
 
 
-@logger.print_return()
 @none_to_list
 def fuse_constant_multiplication(t):
     if t.op != MULTIPLY_OP:
@@ -109,7 +108,6 @@ def fuse_constant_multiplication(t):
         return [Expr(CONSTANT_MULTIPLY_OP, t.a2, t.a1)]
 
 
-@logger.print_return()
 @none_to_list
 def mult_and_add_to_fma(t):
     if t.op != ADD_OP:

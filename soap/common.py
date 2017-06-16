@@ -4,9 +4,11 @@ import functools
 import weakref
 import pickle
 from contextlib import contextmanager
+from collections import namedtuple
 
 import soap.logger as logger
 
+from soap.logger import print_return
 
 class DynamicMethods(object):
 
@@ -183,4 +185,35 @@ class Flyweight(object):
         return v
 
 
-from soap.logger import print_return
+IEEE754Standards = namedtuple('IEEE754Standards', ['half', 'single', 'double', 'quadruple', 'octuple'])
+wfStandards = IEEE754Standards(10, 23, 52, 112, 236)
+weStandards = IEEE754Standards( 5,  8,  11, 15,  19)
+
+def standard_exponent_size_for(wf):
+    """
+    Examples:
+        wf < 1 raises ValueError
+        wf <= 10 returns 5
+        wf = 22 returns 8
+        wf = 23 returns 8
+        wf = 24 returns 11
+        wf > 236 raises ValueError
+    """
+    if wf > wfStandards[-1] or wf < 1:
+        raise ValueError('wf is not in the range [1, {}]'.format(wfStandards[-1]))
+
+    for index, standard_wf in enumerate(wfStandards):
+        if wf <= standard_wf:
+            return weStandards[index]
+
+
+def exponent_size_for_exponent(exp):
+    """
+    Returns an exponent size `we` such that exp is in the range [-(2^(we-1) -2), +(2^(we-1) -1)]
+    (Rightfully) exp = 0 returns 2
+    """
+    import math
+    if exp <= 0:
+        return math.ceil(math.log(-exp + 2, 2) + 1)
+    else: # exp > 0:
+        return math.ceil(math.log( exp + 1, 2) + 1)

@@ -84,7 +84,6 @@ def overapproximate_error(e):
     return FloatInterval(f)
 
 
-@print_return()
 def round_off_error(interval):
     if interval.min == interval.max:
         return round_off_error_from_exact(interval.max)
@@ -104,6 +103,21 @@ def cast_error_constant(v):
 def cast_error(v, w=None):
     w = w if w else v
     return ErrorSemantics([v, w], round_off_error(FractionInterval([v, w])))
+
+
+def error_for_operand(operand, var_env, prec):
+    from soap.common import ignored
+    from soap.semantics import precision_context
+    with precision_context(prec):
+        with ignored(AttributeError):
+            return operand.error(var_env, prec)
+        with ignored(TypeError, KeyError):
+            return error_for_operand(var_env[str(operand)], var_env, prec)
+        with ignored(TypeError):
+            return cast_error(*operand)
+        with ignored(TypeError):
+            return cast_error_constant(operand)
+        return operand
 
 
 class Interval(Lattice):

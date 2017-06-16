@@ -47,10 +47,10 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=2, annotate=False,
-        transformation_depth=1000, expand_singular_frontiers=True, precision='s',
+def run(timing=False, vary_precision=True, precision_delta=16, use_area_cache=True, annotate=False,
+        transformation_depth=1000, expand_singular_frontiers=True, precision=38,
         algorithm='c', compare_with_soap3=False,
-        benchmarks='seidel',#_taylor_b,2d_hydro,seidel,fdtd_1'
+        benchmarks='2mm_2',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -77,7 +77,7 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
     from tests.fused.analysis import improvements, mins_of_analysis
     
     Expr.__repr__ = Expr.__str__
-    logger.set_context(level=logger.levels.debug)
+    logger.set_context(level=logger.levels.error)
     flopoco.use_area_dynamic_cache = use_area_cache
 
     # wf excludes the leading 1 in the mantissa/significand
@@ -303,6 +303,12 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
     logger.debug(transformer_results)
 
     if transformer_results:
+        # a visual indicator to not claim these results as from the benchmark suites
+        if len(benchmarks) > number_in_benchmark_suites:
+            print_func = logger.error
+        else:
+            print_func = print
+
         best_area_improvement = max(transformer_results, key=lambda p:p[2]['scaling'].area)
         best_error_improvement = max(transformer_results, key=lambda p:p[2]['scaling'].error)
         worst_area_cost_of_error = max(transformer_results, key=lambda p:p[2]['cost_of_error'])
@@ -313,14 +319,14 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
         pprint(worst_area_cost_of_error)
         pprint(worst_duration_increase)
         print()
-        print('best area improvement:{} (error improved by {})'.format(
+        print_func('best area improvement:{} (error improved by {})'.format(
             best_area_improvement[2]['scaling'].area, best_area_improvement[2]['scaling'].error))
-        print('best error improvement: {} (area cost was {})'.format(
+        print_func('best error improvement: {} (area cost was {})'.format(
             best_error_improvement[2]['scaling'].error, best_error_improvement[2]['cost_of_error']))
-        print('worst area cost of error: {} (error improved by {})'.format(
+        print_func('worst area cost of error: {} (error improved by {})'.format(
             worst_area_cost_of_error[2]['cost_of_error'], worst_area_cost_of_error[2]['scaling'].error))
         if timing:
-            print('worst duration increase: {} (improvements were {})'.format(
+            print_func('worst duration increase: {} (improvements were {})'.format(
                 worst_duration_increase[2]['duration']['scaling'], worst_duration_increase[2]['scaling']))
     else:
         logger.error('No transformer comparison made.')
@@ -332,9 +338,6 @@ def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=
 
     if fused_failures:
         logger.error('Missing points in fused frontier of', fused_failures)
-
-    if len(benchmarks) > number_in_benchmark_suites:
-        print('Heads up! You are running more than just the standard benchmark suites.')
 
     input('\nPress Enter to continue...')
 
