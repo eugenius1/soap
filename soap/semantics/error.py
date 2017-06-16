@@ -86,10 +86,9 @@ def overapproximate_error(e):
 
 @print_return()
 def round_off_error(interval):
-    if interval.min == interval.max and interval.min == mpfr(interval.min):
-        error = 0
-    else:
-        error = ulp(max(abs(interval.min), abs(interval.max))) / 2
+    if interval.min == interval.max:
+        return round_off_error_from_exact(interval.max)
+    error = ulp(max(abs(interval.min), abs(interval.max))) / 2
     return FractionInterval([-error, error])
 
 
