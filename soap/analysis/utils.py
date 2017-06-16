@@ -197,7 +197,8 @@ class Plot(object):
     def add_analysis(self, expr, func=None, precs=None, var_env=None,
                      depth=None, annotate=False, legend=None,
                      legend_depth=False, legend_time=False,
-                     precision_frontier=None, **kwargs):
+                     precision_frontier=None, cycle_marker=False,
+                     **kwargs):
         """Performs transforms, then analyses expressions and add results to
         plot.
         
@@ -252,7 +253,8 @@ class Plot(object):
         depth = d if legend_depth else None
         duration = t if legend_time else None
         duration = duration if legend_time is True else legend_time
-        kwargs.setdefault('marker', marker)
+        if not cycle_marker:
+            kwargs.setdefault('marker', marker)
         logger.unpersistent('Precision')
         self.add(results, legend=legend, frontier=front, annotate=annotate,
                  time=duration, depth=depth, **kwargs)
@@ -315,7 +317,7 @@ class Plot(object):
         return itertools.cycle('bgrcmyk')
 
     def _markers(self):
-        return itertools.cycle('spo^<>vH.x+')
+        return itertools.cycle('sp^o<>vH.x+')
 
     def _auto_scale(self, plot, xlim, ylim):
         try:
@@ -349,9 +351,8 @@ class Plot(object):
         colors = self._colors()
         color_groups = {}
         for d in self.result_list:
-            if d['color_group'] is None:
-                continue
-            color_groups[d['color_group']] = next(colors)
+            if d['color_group'] != None and d['color_group'] not in color_groups:
+                color_groups[d['color_group']] = next(colors)
         for r in self.result_list:
             d = r['kwargs']
             if not r['color_group'] is None:

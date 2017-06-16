@@ -2,6 +2,10 @@ from collections import namedtuple, Mapping
 
 AreaErrorTuple = namedtuple('AreaErrorTuple', ['area', 'error'])
 
+def tex_sanitise(string):
+    return string.replace('_', '\_')
+
+
 def mins_of_analysis(analysis):
     mins = {}
     for key in ('area', 'error'):
@@ -43,8 +47,11 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2, annotate=True,
-        transformation_depth=100, benchmarks='seidel,fdtd_1'):
+def run(timing=True, vary_precision=False, use_area_cache=True, precision_delta=2, annotate=False,
+        transformation_depth=1000, expand_singular_frontiers=True, precision='s',
+        algorithm='g', compare_with_soap3=True,
+        benchmarks='seidel',#_taylor_b,2d_hydro,seidel,fdtd_1'
+    ):
     benchmark_names = benchmarks
 
     import time
@@ -59,7 +66,7 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
     import soap.semantics.flopoco as flopoco
     from soap.semantics.flopoco import wf_range
     from soap.transformer.utils import (
-        greedy_frontier_closure, greedy_trace, frontier_trace, martel_trace
+        greedy_frontier_closure, greedy_trace, frontier_trace,
     )
     from soap.transformer.biop import (
         BiOpTreeTransformer, FusedBiOpTreeTransformer, FusedOnlyBiOpTreeTransformer,
@@ -71,13 +78,21 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
     
     Expr.__repr__ = Expr.__str__
     logger.set_context(level=logger.levels.error)
+
     # wf excludes the leading 1 in the mantissa/significand
-    half_prec = 10
-    single_prec = gmpy2.ieee(32).precision - 1 # 23
-    double_prec = gmpy2.ieee(64).precision - 1 # 52
-    quad_prec = gmpy2.ieee(128).precision - 1 # 112
-    standard_precs = [half_prec, single_prec, double_prec, quad_prec]
-    precision = single_prec
+    standard_precs = {
+        'half': 10,
+        'single': gmpy2.ieee(32).precision - 1, # 23
+        'double': gmpy2.ieee(64).precision - 1, # 52
+        'quad': gmpy2.ieee(128).precision - 1, # 112
+    }
+    try:
+        precision = int(precision)
+    except (TypeError, ValueError):
+        precision = {'h': 'half', 's': 'single', 'd': 'double', 'q': 'quad'
+            }.get(precision, precision)
+
+        precision = standard_precs.get(precision, standard_precs['single'])
 
     flopoco.use_area_dynamic_cache = use_area_cache
 
@@ -129,21 +144,28 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
 
     # fused unit = 3-input FP adder(s)
     actions = (
-        (BiOpTreeTransformer, 'no fused'),
-        (FusedBiOpTreeTransformer, 'any fused'),
+        (BiOpTreeTransformer, ('original frontier' if vary_precision else 'no fused')),
+        (FusedBiOpTreeTransformer, ('fused frontier' if vary_precision else 'any fused')),
         (FusedOnlyBiOpTreeTransformer, 'only fusing'),
         (Add3TreeTransformer, 'only add3 fusing'),
         (ConstMultTreeTransformer, 'only constMult fusing'),
         (FMATreeTransformer, 'only fma fusing'),
     )[:2]
 
-    traces = (
-        (frontier_trace, transformation_depth),
-        (greedy_frontier_closure, None),
-        (greedy_trace, None),
-    )[2:]
+    traces = {
+        'frontier': (frontier_trace, transformation_depth),
+        'greedy_frontier': (greedy_frontier_closure, transformation_depth),
+        'greedy': (greedy_trace, transformation_depth),
+        'closure': (None, transformation_depth),
+    }
+    if algorithm not in ('a', 'all'):
+        if algorithm not in traces.keys():
+            algorithm = {'f': 'frontier', 'gf': 'greedy_frontier', 'g': 'greedy', 'c': 'closure',
+                }.get(algorithm, 'greedy_frontier')
+        traces = {algorithm: traces[algorithm]}
 
     transformer_results = []
+    fused_failures = []
     
     benchmarks = get_benchmarks(benchmark_names)
     for benchmark_name in benchmarks:
@@ -154,33 +176,46 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
         logger.info('Expr:', str(t))
         logger.info('Tree:', t.tree())
 
-        for trace_ in traces:
-            
+        for algorithm in traces:
+            trace_func, trace_depth = traces[algorithm]
+
             for action in (actions, actions[::-1])[:1]: # forwards or backwards
                 z = []
                 frontier = []
-                title = e.replace('\n', '').replace('  ', '').strip()
+
+                # Format title
+                # eg. '$d + (t \times c)$'
+                title = e.replace('\n', '').replace('  ', '').replace('*', '\\times ').strip()
+                title = '${}$'.format(title)
                 if benchmark_name and benchmark_name[0] != '_':
-                    # eg. '\texttt{2mm\_2}: d + (t * c)'
+                    # eg. '\texttt{2mm\_2}: ' + expr
                     title = '\\texttt{{{name}}}: {expr}'.format(
-                        name=benchmark_name.replace('_', '\_'), expr=title)
+                        name=tex_sanitise(benchmark_name), expr=title)
+                if len(traces) > 1:
+                    title = '{{\\small {t}}} (\\texttt{{{a}}})'.format(t=title, a=tex_sanitise(algorithm))
                 p = Plot(var_env=v, blocking=False, title=title)#,legend_pos='top right')
                 
+                p.add_analysis(t, legend='original expression', s=300, precs=[precision],
+                    cycle_marker=False)
+
                 for transformer_index, action_tuple in enumerate(action):
                     Transformer, label = action_tuple
                     if timing:
                         invalidate_cache()
+
                     duration = time.time()
-                    s = Transformer(t, depth=transformation_depth).closure()
-                    s = trace_[0](t, v, depth=trace_[1], transformer=Transformer)
+                    if algorithm == 'closure':
+                        s = Transformer(t, depth=transformation_depth).closure()
+                    else:
+                        s = trace_func(t, v, depth=trace_depth, transformer=Transformer)
                     unfiltered, frontier = analyse_and_frontier(s, v, prec=precision)
                     duration = time.time() - duration # where to put this?
 
                     logger.info('Transformed:', len(s))
                     logger.info('Reduced by', len(unfiltered)-len(frontier))
                     
-                    if len(frontier) <= 1:
-                        # plot non-frontier points too
+                    if expand_singular_frontiers and len(frontier) <= 1:
+                        # plot non-frontier points too if there would otherwise only be a single point
                         frontier_to_plot = unfiltered
                     else:
                         frontier_to_plot = frontier
@@ -190,10 +225,13 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                     # plot(frontier_to_plot, blocking=False)
                     p.add(frontier_to_plot,
                         legend=label, time=duration, annotate=annotate, linestyle=linestyle,
-                        annotate_kwargs={'fontsize': 10})
+                        color_group=label,
+                        annotate_kwargs={'fontsize': 10}
+                    )
                     z.append(set(map(
                         lambda d:(d['area'], d['error']),
-                        frontier)))
+                        frontier))
+                    )
                     
                     # Analyse the frontier for improvements
                     if transformer_index == 0:
@@ -203,49 +241,64 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
                     else:
                         imp_dict = improvements(original_mins, mins_of_analysis(frontier),
                             original_duration, duration)
-                        transformer_results.append([Transformer.__name__, benchmark_name, imp_dict])
+                        transformer_results.append([
+                            Transformer.__name__, benchmark_name, imp_dict, algorithm])
 
-                if len(z) >= 2: # or if in loop then transformer_index == 1:
+                if len(z) >= 2:
                     fused_success, missing_plots, fused_plots = is_better_frontier_than(
                         z[0], z[1])
                     if missing_plots:
                         logger.error('Fused is missing:', missing_plots)
+                        fused_failures.append(benchmark_name)
                     print('Fused discovered:', fused_plots)
 
                 if vary_precision:
                     linestyle = ':'
-                    marker = ','
-                    p.add_analysis(t,
-                            legend='varying precision of original expression',
-                            linestyle=linestyle, s=30,
-                            precision_frontier=True,
-                            precs=list(range(
-                                precision-precision_delta,
-                                precision+precision_delta+1)
-                            ),
+
+                    for index_fr, frontier_tuple in enumerate([
+                        (original_frontier, 'varying precision of original frontier', 80),
+                        (frontier, 'varying precision of fused frontier', 20)
+                    ]):
+                        front, label, marker_size = frontier_tuple
+                        legend_kwarg = {
+                            'legend': label
+                        }
+                        analysis_kwargs = {
+                            'cycle_marker': (not bool(index_fr)),
+                            's': marker_size,
+                        }
+
+                        for index_epf, expr in enumerate(map(lambda d: Expr(d['expression']), front)):
+                            p.add_analysis(expr,
+                                linestyle=linestyle,
+                                color_group=label,
+                                precision_frontier=True,
+                                precs=list(range(
+                                    precision-precision_delta,
+                                    precision+precision_delta+1)
+                                ),
+                                **legend_kwarg,
+                                **analysis_kwargs,
+                            )
+                            if index_epf == 0:
+                                legend_kwarg = {}
+                
+                if compare_with_soap3:
+                    if benchmark_name in soap3_results:
+                        results = soap3_results[benchmark_name]
+                        p.add(results['analysis'],
+                            legend='SOAP 3', time=results['analysis_duration'], annotate=annotate, linestyle='-.',
+                            annotate_kwargs={'fontsize': 10}
                         )
-                    legend_kwarg = {
-                        'legend': 'varying precision of fused frontier'
-                    }
-                    for index_pf, expr in enumerate(map(lambda d: Expr(d['expression']), frontier)):
-                        p.add_analysis(expr,
-                            linestyle=linestyle, s=30,
-                            precision_frontier=True,
-                            color_group='frontier_precision',
-                            precs=list(range(
-                                precision-precision_delta,
-                                precision+precision_delta+1)
-                            ),
-                            **legend_kwarg
-                        )
-                        if index_pf == 0:
-                            legend_kwarg = {}
-                p.add_analysis(t, legend='original expression', s=300, precs=[precision])
+                    else:
+                        logger.error('No SOAP3 results for {} found. Available are {}'.format(
+                            benchmark_name, list(soap3_results.keys())))
+                
                 p.show()
                 # end for transformer_index, action_tuple
             # end for action
-        # end for trace_
-    # end for bench
+        # end for algorithm in traces:
+    #end for benchmark_name in benchmarks
 
     logger.debug(transformer_results)
 
@@ -273,13 +326,73 @@ def run(timing=True, vary_precision=True, use_area_cache=True, precision_delta=2
         logger.error('No transformer comparison made.')
 
     print('\n', dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks),
-        transformation_depth=transformation_depth,
-        traces=tuple(map(lambda t:t[0].__name__, traces))))
+        transformation_depth=transformation_depth, use_area_cache=use_area_cache,
+        traces=list(traces.keys()),
+    ))
+
+    if fused_failures:
+        logger.error('Missing points in fused frontier of', fused_failures)
 
     if len(benchmarks) > number_in_benchmark_suites:
         print('Heads up! You are running more than just the standard benchmark suites.')
 
     input('\nPress Enter to continue...')
+
+
+soap3_results = {
+    'seidel': {
+        'analysis_duration': 2.2875101566314697,
+        'original': {
+            'area': 411,
+            'error': 2.175569875362271e-07,
+            'expression': '((((a + b) + c) + d) + e) * 0.2'
+        },
+        'analysis': [
+            {
+                'area': 1058,
+                'error': 1.7136335372924805e-07,
+                'expression': '(((d * 0.2) + (a * 0.2)) + ((c * 0.2) + (e * 0.2))) + (b * 0.2)'
+            },
+            {
+                'area': 544,
+                'error': 2.0712616333184997e-07,
+                'expression': '((((a + c) + d) + b) * 0.2) + (e * 0.2)'
+            },
+            {
+                'area': 411,
+                'error': 2.175569875362271e-07,
+                'expression': '((((a + c) + b) + d) + e) * 0.2'
+            },
+            {
+                'area': 649,
+                'error': 1.9371512394172896e-07,
+                'expression': '((c + e) + ((b + d) + a)) * 0.2'
+            },
+            {
+                'area': 554,
+                'error': 1.8179417793362518e-07,
+                'expression': '((a + (c + e)) * 0.2) + ((d * 0.2) + (b * 0.2))'
+            },
+            {
+                'area': 564,
+                'error': 1.8030405612989853e-07,
+                'expression': '((c + e) * 0.2) + (((d * 0.2) + (a * 0.2)) + (b * 0.2))'
+            },
+            {
+                'area': 935,
+                'error': 1.7136336794010276e-07,
+                'expression': '((c * 0.2) + (e * 0.2)) + (((d * 0.2) + (b * 0.2)) + (a * 0.2))'
+            }
+        ],
+        'vary_precision': [
+            {
+                'area': 411,
+                'error': 2.175569875362271e-07,
+                'expression': '((((a + b) + c) + d) + e) * 0.2'
+            },
+        ]
+    }
+}
 
 if __name__ == '__main__':
     run()
