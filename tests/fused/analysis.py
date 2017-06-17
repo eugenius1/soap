@@ -47,10 +47,11 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=False, vary_precision=True, precision_delta=16, use_area_cache=True, annotate=False,
-        transformation_depth=1000, expand_singular_frontiers=True, precision=38,
-        algorithm='c', compare_with_soap3=False,
-        benchmarks='2mm_2',#_taylor_b,2d_hydro,seidel,fdtd_1'
+def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=True, annotate=True,
+        transformation_depth=1000, expand_singular_frontiers=True, expand_all_frontiers=True,
+        precision='s',
+        algorithm='g', compare_with_soap3=False, fma_wf_factor=0,
+        benchmarks='fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -77,8 +78,9 @@ def run(timing=False, vary_precision=True, precision_delta=16, use_area_cache=Tr
     from tests.fused.analysis import improvements, mins_of_analysis
     
     Expr.__repr__ = Expr.__str__
-    logger.set_context(level=logger.levels.error)
+    logger.set_context(level=logger.levels.debug)
     flopoco.use_area_dynamic_cache = use_area_cache
+    flopoco.fma_wf_factor = fma_wf_factor
 
     # wf excludes the leading 1 in the mantissa/significand
     standard_precs = {
@@ -214,7 +216,7 @@ def run(timing=False, vary_precision=True, precision_delta=16, use_area_cache=Tr
                     logger.info('Transformed:', len(s))
                     logger.info('Reduced by', len(unfiltered)-len(frontier))
                     
-                    if expand_singular_frontiers and len(frontier) <= 1:
+                    if expand_all_frontiers or (expand_singular_frontiers and len(frontier) <= 1):
                         # plot non-frontier points too if there would otherwise only be a single point
                         frontier_to_plot = unfiltered
                     else:
@@ -319,7 +321,7 @@ def run(timing=False, vary_precision=True, precision_delta=16, use_area_cache=Tr
         pprint(worst_area_cost_of_error)
         pprint(worst_duration_increase)
         print()
-        print_func('best area improvement:{} (error improved by {})'.format(
+        print_func('best area improvement: {} (error improved by {})'.format(
             best_area_improvement[2]['scaling'].area, best_area_improvement[2]['scaling'].error))
         print_func('best error improvement: {} (area cost was {})'.format(
             best_error_improvement[2]['scaling'].error, best_error_improvement[2]['cost_of_error']))
@@ -333,7 +335,7 @@ def run(timing=False, vary_precision=True, precision_delta=16, use_area_cache=Tr
 
     print('\n', dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks),
         transformation_depth=transformation_depth, use_area_cache=use_area_cache,
-        traces=list(traces.keys()),
+        traces=list(traces.keys()), fma_wf_factor=fma_wf_factor,
     ))
 
     if fused_failures:

@@ -37,6 +37,7 @@ flopoco_generate_figures = False
 
 use_area_dynamic_cache = True
 fma_includes_conversion_to_fp = False
+fma_wf_factor = None
 
 # SOAP-internal representations of flopoco operators
 # they don't have to match the flopoco names thanks to the mapping below
@@ -377,9 +378,21 @@ def luts_for_op(op, we=None, wf=None, **kwargs):
 
     kwargs.update(we=we, wf=wf)
     if op == FMA_OP:
-        MaxMSB_in = 0
-        LSB_acc = -wf-1
-        MSB_acc = 1
+        MaxMSB_in = kwargs['MaxMSB_in']
+        MSB_acc = kwargs['MSB_acc']
+        if fma_wf_factor:
+            # Width of the accumulator becomes 1 + int(fma_wf_factor * wf)
+            LSB_acc = MSB_acc - int(fma_wf_factor * wf) - 1
+        else:
+            LSB_acc = kwargs['LSB_acc']
+
+        # MaxMSB_in should be in the range [-127, 128]
+        if MaxMSB_in < -127:
+            logger.error('Capping MaxMSB_in to -127 instead of', MaxMSB_in)
+            MaxMSB_in = -127
+        elif MaxMSB_in > 128:
+            logger.error('Capping MaxMSB_in to 128 instead of', MaxMSB_in)
+            MaxMSB_in = 128
 
         luts = eval_operator(flopoco_op_mapping[flopoco_version][F_DotProduct],
             op_params=dict(

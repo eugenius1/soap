@@ -5,7 +5,7 @@
 import gmpy2
 from gmpy2 import mpfr, mpq as _mpq
 
-from soap.common import Comparable, print_return
+from soap.common import Comparable
 import soap.logger as logger
 from soap.semantics.common import Lattice, mpq
 from soap.expr.common import (

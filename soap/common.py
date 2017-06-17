@@ -193,10 +193,10 @@ def standard_exponent_size_for(wf):
     """
     Examples:
         wf < 1 raises ValueError
-        wf <= 10 returns 5
-        wf = 22 returns 8
-        wf = 23 returns 8
-        wf = 24 returns 11
+        1 <= wf <= 10 returns 5
+        wf = 22 returns 8 (same exponent size as single precision)
+        wf = 23 returns 8 (single precision)
+        wf = 24 returns 11 (same exponent size as double precision)
         wf > 236 raises ValueError
     """
     if wf > wfStandards[-1] or wf < 1:
@@ -217,3 +217,16 @@ def exponent_size_for_exponent(exp):
         return math.ceil(math.log(-exp + 2, 2) + 1)
     else: # exp > 0:
         return math.ceil(math.log( exp + 1, 2) + 1)
+
+
+def exponent_for_value(value):
+    """
+    The floating-point exponent for value
+    """
+    # or use mpfr(v).as_mantissa_exp()[1]
+    if value == 0:
+        return 0
+    import math
+    # math.floor(x) returns the largest integer less than or equal to x
+    # so also correct for negative exponents
+    return math.floor(math.log(abs(value), 2))

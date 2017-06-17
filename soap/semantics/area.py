@@ -5,15 +5,19 @@
 import pickle
 import itertools
 
+from collections import namedtuple
 from matplotlib import rc, pyplot, pylab
 
 import soap.expr
 import soap.logger as logger
-from soap.common import Comparable
-from soap.semantics import Lattice, flopoco
-from soap.expr.common import (
-    CONSTANT_MULTIPLY_OP,
+from soap.common import Comparable, print_return
+from soap.semantics import Lattice, flopoco, error_for_operand
+from soap.expr import (
+    CONSTANT_MULTIPLY_OP, FMA_OP, MULTIPLY_OP, ADD_OP,
 )
+
+
+LongAccParams = namedtuple('LongAccParams', ['MaxMSB_in', 'LSB_acc', 'MSB_acc'])
 
 
 class AreaSemantics(Comparable, Lattice):
@@ -45,31 +49,62 @@ class AreaSemantics(Comparable, Lattice):
     def meet(self, other):
         pass
 
+    @print_return('AreaSemantics.')
+    def fma_to_long_acc_params(self, a, b, c):
+        """
+        (a * b) + c
+        Returns LongAccParams type
+        """
+        from soap.expr import Expr
+
+        # Creating Expr so we can use exponent_width. Currently, Expr doesn't support lone variables or constants.
+        a_mul_b_exp_bounds = Expr(MULTIPLY_OP, [a, b]).exponent_width(self.v, self.p, return_bounds=True)
+        c_exp_bounds = Expr(CONSTANT_MULTIPLY_OP, [1, c]).exponent_width(self.v, self.p, return_bounds=True)
+        fma_exp_bounds = Expr(FMA_OP, [a, b, c]).exponent_width(self.v, self.p, return_bounds=True)
+
+        # + 1 for MSB's (potentially) due to 2's complement
+        MaxMSB_in = max(a_mul_b_exp_bounds.max, c_exp_bounds.max) + 1
+        LSB_acc = min(a_mul_b_exp_bounds.min, c_exp_bounds.min) - self.p
+        MSB_acc = fma_exp_bounds.max + 1
+        
+        return LongAccParams(MaxMSB_in=MaxMSB_in, LSB_acc=LSB_acc, MSB_acc=MSB_acc)
+
+    @print_return('AreaSemantics.')
     def _op_counts(self):
         # key is op, and value is its count
         from soap.expr.common import OPERATORS_WITH_AREA_INFO
-        from soap.semantics.common import Label
+        def get_expr(obj):
+            from soap.semantics.common import Label
+            from soap.expr import Expr
+            if isinstance(obj, Label):
+                obj = obj.e
+            if isinstance(obj, Expr):
+                for index in range(len(obj.operands)):
+                    obj.operands[index] = get_expr(obj.operands[index])
+            return obj
+
         counts = {}
         for _, e in self.s.items():
             try:
                 op = e.op
-                if op not in OPERATORS_WITH_AREA_INFO:
-                    continue
-                if op == CONSTANT_MULTIPLY_OP:
-                    # include the constant
-                    constant = e.operands[0]
-                    if isinstance(constant, Label):
-                        constant = constant.e
-                    logger.warning('AreaSemantics._op_counts:', type(constant))
-                    key = (op, constant)
-                else:
-                    key = (op,)
-                if op in counts:
-                    counts[key] += 1
-                else:
-                    counts[key] = 1
             except AttributeError:
-                pass
+                continue
+            if op not in OPERATORS_WITH_AREA_INFO:
+                continue
+            expr = get_expr(e)
+            if op == CONSTANT_MULTIPLY_OP:
+                # include the constant
+                constant = expr.operands[0]
+                logger.warning('AreaSemantics._op_counts with constant of type', type(constant))
+                key = (op, constant)
+            elif op in (FMA_OP,):
+                key = (op, *self.fma_to_long_acc_params(*expr.operands))
+            else:
+                key = (op,)
+            if op in counts:
+                counts[key] += 1
+            else:
+                counts[key] = 1
         return counts
 
     def _area(self):
@@ -80,8 +115,11 @@ class AreaSemantics(Comparable, Lattice):
         luts = 0
         for op_tuple in op_counts:
             op_params = dict(base_params)
-            if op_tuple[0] == CONSTANT_MULTIPLY_OP:
+            op = op_tuple[0]
+            if op == CONSTANT_MULTIPLY_OP:
                 op_params['constant'] = op_tuple[1]
+            elif op == FMA_OP:
+                op_params.update(LongAccParams(*op_tuple[1:])._asdict())
             luts += op_counts[op_tuple] * flopoco.luts_for_op(op_tuple[0], **op_params)
         return luts
 

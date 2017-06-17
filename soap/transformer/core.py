@@ -7,7 +7,7 @@ import functools
 import multiprocessing
 
 import soap.logger as logger
-from soap.common import cached, print_return
+from soap.common import cached
 from soap.expr.common import is_expr
 from soap.expr import Expr
 

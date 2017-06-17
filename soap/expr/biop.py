@@ -98,6 +98,14 @@ class Expr(Comparable, Flyweight):
         """Returns the arguments of the expression"""
         return self.operands
 
+    @property
+    def inputs(self):
+        """Returns the inputs to the synthesised expression evaluator"""
+        if self.op == CONSTANT_MULTIPLY_OP:
+            # exclude the constant
+            return self.operands[1:]
+        return self.operands
+
 
     @cached
     def error(self, var_env, prec):
@@ -121,9 +129,11 @@ class Expr(Comparable, Flyweight):
                 return errors[0] | errors[1]
             return errors[0].do_op(self.op, errors[1:])
 
-    def exponent_width(self, var_env, prec):
+
+    @print_return('Expr.')
+    def exponent_width(self, var_env, prec, return_bounds=False):
         """Computes the exponent width required for its evaluation so that no
-        overflow could occur.
+        overflow could occur, at any of the inputs or output.
 
         :param var_env: The ranges of input variables.
         :type var_env: dictionary containing mappings from variables to
@@ -133,25 +143,32 @@ class Expr(Comparable, Flyweight):
         :type prec: int
         """
         import math
-        from soap.common import standard_exponent_size_for, exponent_size_for_exponent
-        from soap.semantics.error import FloatInterval, error_for_operand
+        from soap.common import (
+            standard_exponent_size_for, exponent_size_for_exponent, exponent_for_value,
+        )
+        from soap.semantics.error import Interval, error_for_operand
         from soap.semantics.flopoco import we_min
 
+        we = None
+        exp_lower_bound = None
         bounds = self.error(var_env, prec).v
-        for arg in self.operands:
+        for arg in self.inputs:
             arg_bounds = error_for_operand(arg, var_env, prec).v
             bounds.min = min(bounds.min, arg_bounds.min)
             bounds.max = max(bounds.max, arg_bounds.max)
         # if bounds cover infinitesimal numbers, fallback to IEEE standard
-        if (bounds.min <= 0 and bounds.max >= 0):
+        if bounds.min <= 0 and bounds.max >= 0:
             we = standard_exponent_size_for(prec)
-        else:
-            magnitudes_ = list(map(abs, bounds))
-            magnitudes = [min(magnitudes_), max(magnitudes_)]
-            # math.floor(x) returns the largest integer less than or equal to x
-            # so also correct for negative exponents
-            exp_bounds = map(lambda x: math.floor(math.log(x, 2)), magnitudes)
-            we = max(map(exponent_size_for_exponent, exp_bounds))
+            exp_lower_bound = -(2**(we-1) -2)
+        if we == None or return_bounds:
+            exp_bounds_ = list(map(exponent_for_value, bounds))
+            exp_bounds = [min(exp_bounds_), max(exp_bounds_)]
+            if return_bounds:
+                if exp_lower_bound != None:
+                    exp_bounds[0] = exp_lower_bound
+                return Interval(list(exp_bounds))
+            else:
+                we = max(map(exponent_size_for_exponent, exp_bounds))
         return max(we, we_min)
 
     @cached
