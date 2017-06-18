@@ -9,8 +9,8 @@ from soap.common import Comparable
 import soap.logger as logger
 from soap.semantics.common import Lattice, mpq
 from soap.expr.common import (
-    ADD_OP, SUBTRACT_OP, MULTIPLY_OP, ADD3_OP,
-    CONSTANT_MULTIPLY_OP, FMA_OP,
+    ADD_OP, SUBTRACT_OP, MULTIPLY_OP, BARRIER_OP,
+    ADD3_OP, CONSTANT_MULTIPLY_OP, FMA_OP,
 )
 
 mpfr_type = type(mpfr('1.0'))
@@ -101,7 +101,7 @@ def cast_error_constant(v):
 
 
 def cast_error(v, w=None):
-    w = w if w else v
+    w = w if w != None else v
     return ErrorSemantics([v, w], round_off_error(FractionInterval([v, w])))
 
 
@@ -198,6 +198,7 @@ class ErrorSemantics(Lattice, Comparable):
         ADD_OP: 1,
         SUBTRACT_OP: 1,
         MULTIPLY_OP: 1,
+        BARRIER_OP: 1,
         ADD3_OP: 2,
         CONSTANT_MULTIPLY_OP: 1,
         FMA_OP: 2,
@@ -218,6 +219,13 @@ class ErrorSemantics(Lattice, Comparable):
         """Custom operator on ErrorSemantics
         No need to duplicate self in others.
         """
+        # validate input size
+        others_count = len(others)
+        expected_count = self._do_op_expected_others_count[op]
+        if others_count != expected_count:
+            raise ValueError('{cls}.do_op got {got} elements in `others` instead of {expect}'.format(
+                cls=self.__class__.__name__, got=others_count, expect=expected_count))
+
         # Natural operators
         if op == ADD_OP:
             return self + others[0]
@@ -225,13 +233,8 @@ class ErrorSemantics(Lattice, Comparable):
             return self - others[0]
         elif op == MULTIPLY_OP:
             return self * others[0]
-        
-        # validate input size
-        others_count = len(others)
-        expected_count = self._do_op_expected_others_count[op]
-        if others_count != expected_count:
-            raise ValueError('{cls}.{func} got {got} in others instead of {expect}'.format(
-                cls=self.__class__.__name__, func=do_op.__name__, got=others_count, expect=expected_count))
+        elif op == BARRIER_OP:
+            return self | others[0]
 
         # Custom operators
         v = self.v
@@ -244,18 +247,20 @@ class ErrorSemantics(Lattice, Comparable):
         elif op == CONSTANT_MULTIPLY_OP:
             operand = others[0]
             # self is the constant, operand is the variable
-            v = self.v * operand.v
-            e = round_off_error(v)
             try:
-                e += operand.e * mpq(self.exact_constant)
+                constant = mpq(self.exact_constant)
             except (AttributeError, TypeError) as exception:
                 logger.error('ErrorSemantics.do_op({self}, {op}, {others})'.format(
                     *list(map(repr,(self, op, others)))))
                 if exception == AttributeError:
-                    logger.error('most likely that self does not have an exact_constant attribute')
+                    logger.error('`self` does not have an exact_constant attribute')
                 elif exception == TypeError:
-                    logger.error(type(self.exact_constant))
-                e += operand.e * FractionInterval(self.v)
+                    logger.error(type(self.exact_constant), 'was not compatible with mpq')
+                constant = FractionInterval(self.v)
+
+            v = operand.v * constant
+            e = round_off_error(v)
+            e += operand.e * constant
         elif op == FMA_OP:
             # (a * b) + c
             a, b, c = self, *others[:2]

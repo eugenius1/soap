@@ -48,10 +48,10 @@ def is_better_frontier_than(first, second):
 
 
 def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=True, annotate=True,
-        transformation_depth=1000, expand_singular_frontiers=True, expand_all_frontiers=True,
-        precision='s',
-        algorithm='g', compare_with_soap3=False, fma_wf_factor=0,
-        benchmarks='fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
+        transformation_depth=1000, expand_singular_frontiers=True, expand_all_frontiers=False,
+        precision='s', logging='d', annotate_size=14,
+        algorithm='c', compare_with_soap3=False, fma_wf_factor=0,
+        benchmarks='_add3,'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -67,7 +67,7 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
     import soap.semantics.flopoco as flopoco
     from soap.semantics.flopoco import wf_range
     from soap.transformer.utils import (
-        greedy_frontier_closure, greedy_trace, frontier_trace,
+        greedy_frontier_closure, greedy_trace, frontier_trace, closure
     )
     from soap.transformer.biop import (
         BiOpTreeTransformer, FusedBiOpTreeTransformer, FusedOnlyBiOpTreeTransformer,
@@ -78,11 +78,14 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
     from tests.fused.analysis import improvements, mins_of_analysis
     
     Expr.__repr__ = Expr.__str__
-    logger.set_context(level=logger.levels.debug)
+    logging = {'o': 'off', 'e': 'error', 'w': 'warning', 'i': 'info', 'd': 'debug'
+        }.get(logging, logging)
+    logger.set_context(level=getattr(logger.levels, logging, logger.levels.warning))
     flopoco.use_area_dynamic_cache = use_area_cache
     flopoco.fma_wf_factor = fma_wf_factor
 
     # wf excludes the leading 1 in the mantissa/significand
+    # TODO: replace with IEEE754Standards from soap.common
     standard_precs = {
         'half': 10,
         'single': gmpy2.ieee(32).precision - 1, # 23
@@ -97,56 +100,11 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
 
         precision = standard_precs.get(precision, standard_precs['single'])
 
-    e = '(a + b) + c'
-    e_cm = '3 * a * 2'
     v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
-    e2 = '((a + a) + b) * ((a + b) + b)'
-    e60 = """
-        (
-            (
-                (   
-                    (
-                        (
-                            ((a + a) + b) 
-                            * ((a + b) + b)
-                        ) 
-                        * ((b + b) + c)
-                    ) 
-                    * ((b + c) + c)
-                ) 
-                * ((c + c) + a)
-            ) 
-            * ((c + a) + a)
-        )"""
-    e6 = """
-        (
-            (
-                (
-                    ((a + a) + b) 
-                    * ((a + b) + b)
-                )
-                * (
-                    ((b + b) + c)
-                    * ((b + c) + c)
-                )
-            )
-            * (
-                ((c + c) + a)
-                * ((c + a) + a)
-            )
-        )"""
-    v6 = {
-        'a': ['1', '2'],
-        'b': ['10', '20'],
-        'c': ['100', '200'],
-    }
-    v6a = v6
-    v6a['a'], v6a['b'] = v6a['c'], v6a['c']
 
-    # fused unit = 3-input FP adder(s)
     actions = (
         (BiOpTreeTransformer, ('original frontier' if vary_precision else 'no fused')),
-        (FusedBiOpTreeTransformer, ('fused frontier' if vary_precision else 'any fused')),
+        (FusedBiOpTreeTransformer, ('fused frontier' if vary_precision else 'with fused')),
         (FusedOnlyBiOpTreeTransformer, 'only fusing'),
         (Add3TreeTransformer, 'only add3 fusing'),
         (ConstMultTreeTransformer, 'only constMult fusing'),
@@ -154,10 +112,10 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
     )[:2]
 
     traces = {
-        'frontier': (frontier_trace, transformation_depth),
-        'greedy_frontier': (greedy_frontier_closure, transformation_depth),
-        'greedy': (greedy_trace, transformation_depth),
-        'closure': (None, transformation_depth),
+        'frontier': frontier_trace,
+        'greedy_frontier': greedy_frontier_closure,
+        'greedy': greedy_trace,
+        'closure': closure,
     }
     if algorithm not in ('a', 'all'):
         if algorithm not in traces.keys():
@@ -179,7 +137,7 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
         logger.info('Tree:', t.tree())
 
         for algorithm in traces:
-            trace_func, trace_depth = traces[algorithm]
+            trace_func = traces[algorithm]
 
             for action in (actions, actions[::-1])[:1]: # forwards or backwards
                 z = []
@@ -187,14 +145,22 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
 
                 # Format title
                 # eg. '$d + (t \times c)$'
-                title = e.replace('\n', '').replace('  ', '').replace('*', '\\times ').strip()
+                title = e.replace('\n', '').replace('  ', '')
+                original_title_length = len(title)
+                title = title.replace('*', '\\times ').strip()
                 title = '${}$'.format(title)
                 if benchmark_name and benchmark_name[0] != '_':
                     # eg. '\texttt{2mm\_2}: ' + expr
                     title = '\\texttt{{{name}}}: {expr}'.format(
                         name=tex_sanitise(benchmark_name), expr=title)
                 if len(traces) > 1:
-                    title = '{{\\small {t}}} (\\texttt{{{a}}})'.format(t=title, a=tex_sanitise(algorithm))
+                    title = '{{\\normalsize {t}}} (\\texttt{{{a}}})'.format(t=title, a=tex_sanitise(algorithm))
+                elif original_title_length > 60:
+                    title = '{{\\Large {}}}'.format(title)
+                elif original_title_length > 40:
+                    title = '{{\\LARGE {}}}'.format(title)
+                elif original_title_length > 30:
+                    title = '{{\\huge {}}}'.format(title)
                 p = Plot(var_env=v, blocking=False, title=title)#,legend_pos='top right')
                 
                 p.add_analysis(t, legend='original expression', s=300, precs=[precision],
@@ -206,10 +172,7 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
                         invalidate_cache()
 
                     duration = time.time()
-                    if algorithm == 'closure':
-                        s = Transformer(t, depth=transformation_depth).closure()
-                    else:
-                        s = trace_func(t, v, depth=trace_depth, transformer=Transformer)
+                    s = trace_func(t, v, depth=transformation_depth, prec=precision, transformer=Transformer)
                     unfiltered, frontier = analyse_and_frontier(s, v, prec=precision)
                     duration = time.time() - duration # where to put this?
 
@@ -228,7 +191,7 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
                     p.add(frontier_to_plot,
                         legend=label, time=duration, annotate=annotate, linestyle=linestyle,
                         color_group=label,
-                        annotate_kwargs={'fontsize': 10}
+                        annotate_kwargs={'fontsize': annotate_size}
                     )
                     z.append(set(map(
                         lambda d:(d['area'], d['error']),
@@ -290,7 +253,7 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
                         results = soap3_results[benchmark_name]
                         p.add(results['analysis'],
                             legend='SOAP 3', time=results['analysis_duration'], annotate=annotate, linestyle='-.',
-                            annotate_kwargs={'fontsize': 10}
+                            annotate_kwargs={'fontsize': annotate_size}
                         )
                     else:
                         logger.error('No SOAP3 results for {} found. Available are {}'.format(

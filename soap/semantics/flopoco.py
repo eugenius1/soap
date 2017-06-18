@@ -9,7 +9,6 @@ import soap.logger as logger
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP, FMA_OP,
 )
-from soap.common import print_return
 
 
 class FlopocoMissingImplementationError(Exception):
@@ -371,7 +370,7 @@ def multiplier(we, wf):
 
 
 @cached
-@print_return('flopoco.')
+@logger.print_return('flopoco.')
 def luts_for_op(op, we=None, wf=None, **kwargs):
     if flopoco_version == flopoco_main_version and op in _op_luts:
         return _impl(_op_luts[op], we, wf)

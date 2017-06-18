@@ -151,7 +151,7 @@ class TreeTransformer(object):
 
     def _closure_r(self, trees, reduced=False):
         """Transitive closure algorithm."""
-        if self._d >= RECURSION_LIMIT and self.transform_methods:
+        if self._d > RECURSION_LIMIT and self.transform_methods:
             logger.warning('Depth limit not set.', self._d)
         done_trees = set()
         todo_trees = set(trees)

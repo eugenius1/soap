@@ -10,7 +10,7 @@ from matplotlib import rc, pyplot, pylab
 
 import soap.expr
 import soap.logger as logger
-from soap.common import Comparable, print_return
+from soap.common import Comparable
 from soap.semantics import Lattice, flopoco, error_for_operand
 from soap.expr import (
     CONSTANT_MULTIPLY_OP, FMA_OP, MULTIPLY_OP, ADD_OP,
@@ -49,7 +49,6 @@ class AreaSemantics(Comparable, Lattice):
     def meet(self, other):
         pass
 
-    @print_return('AreaSemantics.')
     def fma_to_long_acc_params(self, a, b, c):
         """
         (a * b) + c
@@ -57,10 +56,10 @@ class AreaSemantics(Comparable, Lattice):
         """
         from soap.expr import Expr
 
-        # Creating Expr so we can use exponent_width. Currently, Expr doesn't support lone variables or constants.
-        a_mul_b_exp_bounds = Expr(MULTIPLY_OP, [a, b]).exponent_width(self.v, self.p, return_bounds=True)
-        c_exp_bounds = Expr(CONSTANT_MULTIPLY_OP, [1, c]).exponent_width(self.v, self.p, return_bounds=True)
-        fma_exp_bounds = Expr(FMA_OP, [a, b, c]).exponent_width(self.v, self.p, return_bounds=True)
+        # Creating Expr so we can use exponent_bounds. Currently, Expr doesn't support lone variables or constants.
+        a_mul_b_exp_bounds = Expr(MULTIPLY_OP, [a, b]).exponent_bounds(self.v, self.p)
+        c_exp_bounds = Expr(CONSTANT_MULTIPLY_OP, [1, c]).exponent_bounds(self.v, self.p)
+        fma_exp_bounds = Expr(FMA_OP, [a, b, c]).exponent_bounds(self.v, self.p)
 
         # + 1 for MSB's (potentially) due to 2's complement
         MaxMSB_in = max(a_mul_b_exp_bounds.max, c_exp_bounds.max) + 1
@@ -69,7 +68,6 @@ class AreaSemantics(Comparable, Lattice):
         
         return LongAccParams(MaxMSB_in=MaxMSB_in, LSB_acc=LSB_acc, MSB_acc=MSB_acc)
 
-    @print_return('AreaSemantics.')
     def _op_counts(self):
         # key is op, and value is its count
         from soap.expr.common import OPERATORS_WITH_AREA_INFO
@@ -84,7 +82,7 @@ class AreaSemantics(Comparable, Lattice):
             return obj
 
         counts = {}
-        for _, e in self.s.items():
+        for e in self.s.values():
             try:
                 op = e.op
             except AttributeError:
@@ -101,7 +99,7 @@ class AreaSemantics(Comparable, Lattice):
                 key = (op, *self.fma_to_long_acc_params(*expr.operands))
             else:
                 key = (op,)
-            if op in counts:
+            if key in counts:
                 counts[key] += 1
             else:
                 counts[key] = 1

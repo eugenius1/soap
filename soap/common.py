@@ -189,6 +189,7 @@ IEEE754Standards = namedtuple('IEEE754Standards', ['half', 'single', 'double', '
 wfStandards = IEEE754Standards(10, 23, 52, 112, 236)
 weStandards = IEEE754Standards( 5,  8,  11, 15,  19)
 
+
 def standard_exponent_size_for(wf):
     """
     Examples:

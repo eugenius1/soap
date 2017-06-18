@@ -4,7 +4,7 @@
 """
 import gmpy2
 
-from soap.common import Comparable, Flyweight, cached, ignored, print_return
+from soap.common import Comparable, Flyweight, cached, ignored
 from soap.expr.common import (
     ADD_OP, MULTIPLY_OP, BARRIER_OP,
     COMMUTATIVITY_OPERATORS, PRIMITIVE_OPERATORS_WITH_2_TERMS,
@@ -107,7 +107,7 @@ class Expr(Comparable, Flyweight):
         return self.operands
 
 
-    @cached
+    #@cached # caused unexplainable issues with benchmark fdtd_1
     def error(self, var_env, prec):
         """Computes the error bound of its evaulation.
 
@@ -120,17 +120,10 @@ class Expr(Comparable, Flyweight):
         """
         from soap.semantics import precision_context, error_for_operand
         with precision_context(prec):
-            errors = tuple(error_for_operand(o, var_env, prec) for o in self.args)
-            if self.op == ADD_OP:
-                return errors[0] + errors[1]
-            if self.op == MULTIPLY_OP:
-                return errors[0] * errors[1]
-            if self.op == BARRIER_OP:
-                return errors[0] | errors[1]
+            errors = [error_for_operand(o, var_env, prec) for o in self.args]
             return errors[0].do_op(self.op, errors[1:])
 
 
-    @print_return('Expr.')
     def exponent_width(self, var_env, prec, return_bounds=False):
         """Computes the exponent width required for its evaluation so that no
         overflow could occur, at any of the inputs or output.
@@ -166,10 +159,15 @@ class Expr(Comparable, Flyweight):
             if return_bounds:
                 if exp_lower_bound != None:
                     exp_bounds[0] = exp_lower_bound
-                return Interval(list(exp_bounds))
+                return Interval(exp_bounds)
             else:
                 we = max(map(exponent_size_for_exponent, exp_bounds))
         return max(we, we_min)
+
+
+    def exponent_bounds(self, var_env, prec):
+        return self.exponent_width(var_env, prec, return_bounds=True)
+
 
     @cached
     def area(self, var_env, prec):
@@ -272,10 +270,10 @@ class Expr(Comparable, Flyweight):
                 return env[a]
             except KeyError:
                 return a
-        return self.__class__(self.op, *tuple([substitch(arg) for arg in self.operands]))
+        return self.__class__(self.op, [substitch(arg) for arg in self.operands])
 
     def __iter__(self):
-        return iter((self.op, *tuple(self.operands)))
+        return iter((self.op, *self.operands))
 
     def __str__(self):
         if self.op in PRIMITIVE_OPERATORS_WITH_2_TERMS:
@@ -291,7 +289,8 @@ class Expr(Comparable, Flyweight):
             return "Expr(op='%s', a1=%s, a2=%s)" % \
                 (self.op, repr(self.a1), repr(self.a2))
         else:
-            return self.__str__()
+            return '{cls}({op}, {params})'.format(
+                cls=self.__class__.__name__, op=self.op, params=params)
 
     def do_op(self, op, others=[], **kwargs):
         """Custom operator on Expr
@@ -328,6 +327,8 @@ class Expr(Comparable, Flyweight):
     def _symmetric_id(self):
         if self.op in COMMUTATIVITY_OPERATORS:
             _sym_id = (self.op, frozenset(self.args))
+        elif self.op == FMA_OP:
+            _sym_id = (self.op, frozenset(self.args[:2]), self.args[2])
         else:
             _sym_id = tuple(self)
         return _sym_id

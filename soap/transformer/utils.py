@@ -15,11 +15,13 @@ from soap.transformer.martel import MartelBiOpTreeTransformer
 from soap.analysis import expr_frontier
 
 
-def closure(tree, transformer=None, **kwargs):
+def closure(tree, var_env=None, depth=None, prec=None, transformer=None, **kwargs):
     """The full transitive closure."""
     if not transformer:
         transformer = BiOpTreeTransformer
-    return transformer(tree, **kwargs).closure()
+    traces = GreedyTraceExpr(tree).traces(var_env, depth, prec, transformer=transformer, **kwargs)
+    traces.add(tree)
+    return transformer(traces, depth=depth, **kwargs).closure()
 
 
 def full_closure(tree, **kwargs):
@@ -158,10 +160,6 @@ class TraceExpr(Expr):
 
     def closure(self, trees, **kwargs):
         raise NotImplementedError
-
-    def __repr__(self):
-        return "TraceExpr(op='%s', a1=%s, a2=%s)" % \
-            (self.op, repr(self.a1), repr(self.a2))
 
 
 class MartelTraceExpr(TraceExpr):
