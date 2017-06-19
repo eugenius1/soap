@@ -43,7 +43,7 @@ def _ulp(v):
         return mpfr('Inf')
 
 
-def ulp(v, underflow=True):
+def ulp(v, underflow=False):
     """Computes the unit of the last place for a value.
 
     FIXME big question: what is ulp(0)?

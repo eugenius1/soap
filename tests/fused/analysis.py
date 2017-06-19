@@ -47,11 +47,11 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=True, annotate=True,
+def run(timing=True, vary_precision=True, precision_delta=2, use_area_cache=True, annotate=True,
         transformation_depth=1000, expand_singular_frontiers=True, expand_all_frontiers=False,
-        precision='s', logging='d', annotate_size=14,
-        algorithm='c', compare_with_soap3=False, fma_wf_factor=0,
-        benchmarks='_add3,'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
+        precision='s', logging='e', annotate_size=14,
+        algorithm='c', compare_with_soap3=False, fma_wf_factor=1,
+        benchmarks='seidel,'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -187,6 +187,8 @@ def run(timing=True, vary_precision=False, precision_delta=2, use_area_cache=Tru
                     
                     logger.info(frontier_to_plot)
                     linestyle = '--' if transformer_index == 0 else '-'
+                    # don't include the time duration in plots if not timing
+                    duration = None if not timing else duration
                     # plot(frontier_to_plot, blocking=False)
                     p.add(frontier_to_plot,
                         legend=label, time=duration, annotate=annotate, linestyle=linestyle,
