@@ -222,7 +222,7 @@ basics_benchmarks = _convert_from_dict(basics_dict)
 all_benchmarks = dict(benchmarks)
 all_benchmarks.update(**custom_benchmarks, **basics_benchmarks)
 
-def get_by_name(names):
+def get_by_name(names, warning_print=print):
     def filter_dict_for_key(dictionary, name):
         return {name: dictionary[name]}
 
@@ -255,5 +255,5 @@ def get_by_name(names):
                 if len(names) == 1:
                     raise KeyError(error_message)
                 else:
-                    print(error_message)
+                    warning_print(error_message)
     return result

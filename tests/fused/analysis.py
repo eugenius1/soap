@@ -126,7 +126,7 @@ def run(timing=True, vary_precision=True, precision_delta=2, use_area_cache=True
     transformer_results = []
     fused_failures = []
     
-    benchmarks = get_benchmarks(benchmark_names)
+    benchmarks = get_benchmarks(benchmark_names, warning_print=logger.error)
     for benchmark_name in benchmarks:
         print('Running ', end='')
         logger.error(benchmark_name)

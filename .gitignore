@@ -3,10 +3,3 @@
 
 # python
 *.py[co]
-
-# symbolic links
-soap/*/soap
-soap/semantics/akpytemp
-soap/transformer/tests
-tests/fused/soap
-tests/fused/tests
