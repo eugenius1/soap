@@ -280,7 +280,7 @@ class Plot(object):
         """
         if legend:
             if depth:
-                legend += ', %d' % depth
+                legend += ', depth=%d' % depth
             if time:
                 try:
                     legend += ' (%1.2fs)' % time

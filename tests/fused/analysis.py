@@ -47,12 +47,13 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
-        precision_step=1, precision_start=23, precision_end=52, use_area_cache=True, annotate=True,
-        transformation_depth=10, expand_singular_frontiers=True, expand_all_frontiers=False,
+def run(timing=True, vary_transformation_depth=False,
+        vary_precision=False, vary_precision_one_frontier=True,
+        precision_step=1, precision_start=23, precision_end=52, use_area_cache=True, annotate=False,
+        transformation_depth=100, expand_singular_frontiers=True, expand_all_frontiers=False,
         precision='s', logging='w', annotate_size=14,
-        algorithm='c', compare_with_soap3=False, fma_wf_factor=0,
-        benchmarks='state_frag'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
+        algorithm='c', compare_with_soap3=False, fma_wf_factor=1,
+        benchmarks='s'#heat-3d'#,fdtd-2d,state_frag'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -109,14 +110,24 @@ def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
 
     v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
 
-    actions = (
-        (BiOpTreeTransformer, ('original frontier' if vary_precision else 'no fused')),
-        (FusedBiOpTreeTransformer, ('fused frontier' if vary_precision else 'with fused')),
-        (FusedOnlyBiOpTreeTransformer, 'only fusing'),
-        (Add3TreeTransformer, 'only add3 fusing'),
-        (ConstMultTreeTransformer, 'only constMult fusing'),
-        (FMATreeTransformer, 'only fma fusing'),
-    )[:2]
+    if not vary_transformation_depth:
+        actions = (
+            (BiOpTreeTransformer, ('original frontier' if vary_precision else 'no fused')),
+            (FusedBiOpTreeTransformer, ('fused frontier' if vary_precision else 'with fused')),
+            (FusedOnlyBiOpTreeTransformer, 'only fusing'),
+            (Add3TreeTransformer, 'only add3 fusing'),
+            (ConstMultTreeTransformer, 'only constMult fusing'),
+            (FMATreeTransformer, 'only fma fusing'),
+        )[:2]
+    else:
+        actions = (
+            (FusedBiOpTreeTransformer, 'fused frontier', 1),
+            (FusedBiOpTreeTransformer, 'fused frontier', 2),
+            (FusedBiOpTreeTransformer, 'fused frontier', 3),
+            (FusedBiOpTreeTransformer, 'fused frontier', 4),
+            (FusedBiOpTreeTransformer, 'fused frontier', 5),
+            (FusedBiOpTreeTransformer, 'fused frontier', 6),
+        )
 
     traces = {
         'frontier': frontier_trace,
@@ -129,6 +140,8 @@ def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
             algorithm = {'f': 'frontier', 'gf': 'greedy_frontier', 'fg': 'greedy_frontier', 'g': 'greedy', 'c': 'closure',
                 }.get(algorithm, 'greedy_frontier')
         traces = {algorithm: traces[algorithm]}
+
+    line_styles = ['dashed', 'dashdot', 'dotted', 'solid']
 
     transformer_results = []
     fused_failures = []
@@ -182,8 +195,15 @@ def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
                 p.add_analysis(t, legend='original expression', s=300, precs=[precision],
                     cycle_marker=False)
 
+                plot_extra_kwargs = {}
+
                 for transformer_index, action_tuple in enumerate(action):
-                    Transformer, label = action_tuple
+                    if vary_transformation_depth:# and transformer_index > 0:
+                        Transformer, label, current_depth_limit = action_tuple
+                        logger.warning('Current depth:', current_depth_limit)
+                    else:
+                        Transformer, label = action_tuple
+                    
                     if timing:
                         invalidate_cache()
 
@@ -202,14 +222,20 @@ def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
                         frontier_to_plot = frontier
                     
                     logger.info(frontier_to_plot)
-                    linestyle = '--' if transformer_index == 0 else '-'
                     # don't include the time duration in plots if not timing
                     duration = None if not timing else duration
-                    # plot(frontier_to_plot, blocking=False)
+                    if vary_transformation_depth:
+                        plot_extra_kwargs = {'depth': current_depth_limit}
+                        linestyle = line_styles[transformer_index % len(line_styles)]
+                    else:
+                        plot_extra_kwargs.update(color_group=label)
+                        linestyle = '--' if transformer_index == 0 else '-'
+
+                    # Plot the frontier
                     p.add(frontier_to_plot,
                         legend=label, time=duration, annotate=annotate, linestyle=linestyle,
-                        color_group=label,
-                        annotate_kwargs={'fontsize': annotate_size}
+                        annotate_kwargs={'fontsize': annotate_size},
+                        **plot_extra_kwargs,
                     )
                     z.append(set(map(
                         lambda d:(d['area'], d['error']),
@@ -290,7 +316,7 @@ def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
         # end for algorithm in traces:
     #end for benchmark_name in benchmarks
 
-    logger.debug(transformer_results)
+    logger.warning(transformer_results)
 
     if transformer_results:
         # a visual indicator to not claim these results as from the benchmark suites
@@ -328,6 +354,10 @@ def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
 
     if fused_failures:
         logger.error('Missing points in fused frontier of', fused_failures)
+
+    import subprocess
+    subprocess.call(['speech-dispatcher'])        #start speech dispatcher
+    subprocess.call(['spd-say', '"yo"'])
 
     input('\nPress Enter to continue...')
 
