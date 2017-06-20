@@ -47,12 +47,12 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_precision=True, vary_precision_one_frontier=True,
-        precision_step=1, precision_start=23, precision_end=52, use_area_cache=True, annotate=False,
-        transformation_depth=100, expand_singular_frontiers=True, expand_all_frontiers=False,
-        precision=38, logging='e', annotate_size=14,
+def run(timing=True, vary_precision=False, vary_precision_one_frontier=True,
+        precision_step=1, precision_start=23, precision_end=52, use_area_cache=True, annotate=True,
+        transformation_depth=10, expand_singular_frontiers=True, expand_all_frontiers=False,
+        precision='s', logging='w', annotate_size=14,
         algorithm='c', compare_with_soap3=False, fma_wf_factor=0,
-        benchmarks='seidel'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
+        benchmarks='state_frag'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -134,11 +134,20 @@ def run(timing=True, vary_precision=True, vary_precision_one_frontier=True,
     fused_failures = []
     
     benchmarks = get_benchmarks(benchmark_names, warning_print=logger.error)
+
     for benchmark_name in benchmarks:
         print('Running ', end='')
         logger.error(benchmark_name)
         bench = benchmarks[benchmark_name]
         e, v = bench.expr_and_vars()
+        if bench.max_transformation_depth != None:
+            current_depth_limit = min(transformation_depth, bench.max_transformation_depth)
+            if current_depth_limit != transformation_depth:
+                logger.warning('Capped the input transformation depth from {old} to {new} for {bench}'.format(
+                    old=transformation_depth, new=current_depth_limit, bench=benchmark_name))
+        else:
+            current_depth_limit = transformation_depth
+
         t = Expr(e)
         logger.info('Expr:', str(t))
         logger.info('Tree:', t.tree())
@@ -154,7 +163,7 @@ def run(timing=True, vary_precision=True, vary_precision_one_frontier=True,
                 # eg. '$d + (t \times c)$'
                 title = e.replace('\n', '').replace('  ', '')
                 original_title_length = len(title)
-                title = title.replace('*', '\\times ').strip()
+                title = title.replace('*', '\\times ').replace('Sigma', '\\Sigma').strip()
                 title = '${}$'.format(title)
                 if benchmark_name and benchmark_name[0] != '_':
                     # eg. '\texttt{2mm\_2}: ' + expr
@@ -179,7 +188,7 @@ def run(timing=True, vary_precision=True, vary_precision_one_frontier=True,
                         invalidate_cache()
 
                     duration = time.time()
-                    s = trace_func(t, v, depth=transformation_depth, prec=precision, transformer=Transformer)
+                    s = trace_func(t, v, depth=current_depth_limit, prec=precision, transformer=Transformer)
                     unfiltered, frontier = analyse_and_frontier(s, v, prec=precision)
                     duration = time.time() - duration # where to put this?
 

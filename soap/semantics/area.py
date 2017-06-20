@@ -93,7 +93,6 @@ class AreaSemantics(Comparable, Lattice):
             if op == CONSTANT_MULTIPLY_OP:
                 # include the constant
                 constant = expr.operands[0]
-                logger.warning('AreaSemantics._op_counts with constant of type', type(constant))
                 key = (op, constant)
             elif op in (FMA_OP,):
                 key = (op, *self.fma_to_long_acc_params(*expr.operands))

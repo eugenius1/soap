@@ -3,10 +3,11 @@ from tests.benchmarks.livermore import dictionary as livermore_dict
 
 class BenchmarkExpr(object):
     """docstring for BenchmarkExpr"""
-    def __init__(self, e, v, *args, **kwargs):
+    def __init__(self, e, v, max_transformation_depth=None, *args, **kwargs):
         super(BenchmarkExpr, self).__init__()
         self.e = e
         self.v = v
+        self.max_transformation_depth = max_transformation_depth
         self.name = kwargs.get('name', None)
 
     @property
