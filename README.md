@@ -18,7 +18,7 @@ Instructions are given for Ubuntu and are expected to work for other major Linux
 
 - Install [Matplotlib](http://matplotlib.org/users/installing.html#build-requirements).
 
-- Install Python3, but this usually always already installed.
+- Install Python3, but this usually already installed.
 
 - Install dependencies:
 ```bash
