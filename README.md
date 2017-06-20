@@ -16,9 +16,9 @@ More details including my report are [here](http://eugenius1.github.io/fyp).
 
 Instructions are given for Ubuntu and are expected to work for other major Linux OS's.
 
-- Install [Matplotlib](http://matplotlib.org/users/installing.html#build-requirements).
+- Install [matplotlib](http://matplotlib.org/users/installing.html#build-requirements).
 
-- Install Python3, but this usually already installed.
+- Install [Python3](https://www.python.org/downloads/), but this pretty much always already installed.
 
 - Install dependencies:
 ```bash
@@ -49,6 +49,11 @@ While in the project directory, run the following command to run the default par
 ```bash
 PYTHONPATH=. python3 tests/fused/analysis.py 
 ```
+
+### Parameters
+
+The function call `run()` at the end of tests/fused/analysis.py can take keyword arguments, as follows:
+
 
 Defaults are to run the benchmark expressions available (a subset from PolyBench and Livermore Loops) at single-precision, and varying the precision of the frontiers.
 Area dynamic cache is used by default and full closure is perfomed with a maximum transormation depth of 1000.

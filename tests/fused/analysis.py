@@ -47,11 +47,12 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_precision=True, precision_delta=2, use_area_cache=True, annotate=True,
-        transformation_depth=1000, expand_singular_frontiers=True, expand_all_frontiers=False,
-        precision='s', logging='e', annotate_size=14,
-        algorithm='c', compare_with_soap3=False, fma_wf_factor=1,
-        benchmarks='seidel,'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
+def run(timing=True, vary_precision=True, vary_precision_one_frontier=True,
+        precision_step=1, precision_start=23, precision_end=52, use_area_cache=True, annotate=False,
+        transformation_depth=100, expand_singular_frontiers=True, expand_all_frontiers=False,
+        precision=38, logging='e', annotate_size=14,
+        algorithm='c', compare_with_soap3=False, fma_wf_factor=0,
+        benchmarks='seidel'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -97,8 +98,14 @@ def run(timing=True, vary_precision=True, precision_delta=2, use_area_cache=True
     except (TypeError, ValueError):
         precision = {'h': 'half', 's': 'single', 'd': 'double', 'q': 'quad'
             }.get(precision, precision)
-
         precision = standard_precs.get(precision, standard_precs['single'])
+
+    if vary_precision:
+        precs = list(range(
+            precision_start,
+            precision_end + 1,
+            precision_step)
+        )
 
     v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
 
@@ -224,31 +231,38 @@ def run(timing=True, vary_precision=True, precision_delta=2, use_area_cache=True
 
                     for index_fr, frontier_tuple in enumerate([
                         (original_frontier, 'varying precision of original frontier', 80),
-                        (frontier, 'varying precision of fused frontier', 20)
+                        (frontier, 'varying precision of fused frontier', 30)
                     ]):
                         front, label, marker_size = frontier_tuple
+                        frontier_expressions = list(map(lambda d: Expr(d['expression']), front))
                         legend_kwarg = {
                             'legend': label
                         }
                         analysis_kwargs = {
-                            'cycle_marker': (not bool(index_fr)),
+                            #'cycle_marker': (not bool(index_fr)),
                             's': marker_size,
                         }
 
-                        for index_epf, expr in enumerate(map(lambda d: Expr(d['expression']), front)):
-                            p.add_analysis(expr,
+                        if vary_precision_one_frontier:
+                            _, results_vp = analyse_and_frontier(frontier_expressions, v, precs)
+                            p.add(results_vp,
                                 linestyle=linestyle,
                                 color_group=label,
-                                precision_frontier=True,
-                                precs=list(range(
-                                    precision-precision_delta,
-                                    precision+precision_delta+1)
-                                ),
                                 **legend_kwarg,
                                 **analysis_kwargs,
                             )
-                            if index_epf == 0:
-                                legend_kwarg = {}
+                        else:
+                            for index_epf, expr in enumerate(frontier_expressions):
+                                p.add_analysis(expr,
+                                    linestyle=linestyle,
+                                    color_group=label,
+                                    precision_frontier=True,
+                                    precs=precs,
+                                    **legend_kwarg,
+                                    **analysis_kwargs,
+                                )
+                                if index_epf == 0:
+                                    legend_kwarg = {}
                 
                 if compare_with_soap3:
                     if benchmark_name in soap3_results:

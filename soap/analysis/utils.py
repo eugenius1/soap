@@ -12,7 +12,7 @@ import soap.logger as logger
 
 def _analyser(expr_set, var_env, prec=None):
     from soap.analysis.core import AreaErrorAnalysis
-    precs = [prec] if prec else None
+    precs = [prec] if isinstance(prec, int) else prec
     return AreaErrorAnalysis(expr_set, var_env, precs)
 
 
