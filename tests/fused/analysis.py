@@ -51,9 +51,9 @@ def run(timing=True, vary_transformation_depth=False,
         vary_precision=False, vary_precision_one_frontier=True,
         precision_step=1, precision_start=23, precision_end=52, use_area_cache=True, annotate=False,
         transformation_depth=100, expand_singular_frontiers=True, expand_all_frontiers=False,
-        precision='d', logging='w', annotate_size=14,
+        precision='s', logging='d', annotate_size=14,
         algorithm='c', compare_with_soap3=False, fma_wf_factor=0,
-        benchmarks='s'#heat-3d'#,fdtd-2d,state_frag'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
+        benchmarks='_fma'#heat-3d'#,fdtd-2d,state_frag'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
 
@@ -355,9 +355,10 @@ def run(timing=True, vary_transformation_depth=False,
     if fused_failures:
         logger.error('Missing points in fused frontier of', fused_failures)
 
-    import subprocess
-    subprocess.call(['speech-dispatcher'])        #start speech dispatcher
-    subprocess.call(['spd-say', '"yo"'])
+    if len(benchmarks) >= number_in_benchmark_suites:
+        import subprocess
+        subprocess.call(['speech-dispatcher'])        #start speech dispatcher
+        subprocess.call(['spd-say', '"yo"'])
 
     input('\nPress Enter to continue...')
 

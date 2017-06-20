@@ -124,7 +124,7 @@ class Expr(Comparable, Flyweight):
             return errors[0].do_op(self.op, errors[1:])
 
 
-    def exponent_width(self, var_env, prec, return_bounds=False):
+    def exponent_width(self, var_env, prec, return_bounds=False, output_only=False):
         """Computes the exponent width required for its evaluation so that no
         overflow could occur, at any of the inputs or output.
 
@@ -145,10 +145,11 @@ class Expr(Comparable, Flyweight):
         we = None
         exp_lower_bound = None
         bounds = self.error(var_env, prec).v
-        for arg in self.inputs:
-            arg_bounds = error_for_operand(arg, var_env, prec).v
-            bounds.min = min(bounds.min, arg_bounds.min)
-            bounds.max = max(bounds.max, arg_bounds.max)
+        if not output_only:
+            for arg in self.inputs:
+                arg_bounds = error_for_operand(arg, var_env, prec).v
+                bounds.min = min(bounds.min, arg_bounds.min)
+                bounds.max = max(bounds.max, arg_bounds.max)
         # if bounds cover infinitesimal numbers, fallback to IEEE standard
         if bounds.min <= 0 and bounds.max >= 0:
             we = standard_exponent_size_for(prec)
@@ -165,8 +166,8 @@ class Expr(Comparable, Flyweight):
         return max(we, we_min)
 
 
-    def exponent_bounds(self, var_env, prec):
-        return self.exponent_width(var_env, prec, return_bounds=True)
+    def exponent_bounds(self, var_env, prec, output_only=True):
+        return self.exponent_width(var_env, prec, return_bounds=True, output_only=output_only)
 
 
     @cached
