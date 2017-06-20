@@ -51,8 +51,8 @@ def run(timing=True, vary_transformation_depth=False,
         vary_precision=False, vary_precision_one_frontier=True,
         precision_step=1, precision_start=23, precision_end=52, use_area_cache=True, annotate=False,
         transformation_depth=100, expand_singular_frontiers=True, expand_all_frontiers=False,
-        precision='s', logging='w', annotate_size=14,
-        algorithm='c', compare_with_soap3=False, fma_wf_factor=1,
+        precision='d', logging='w', annotate_size=14,
+        algorithm='c', compare_with_soap3=False, fma_wf_factor=0,
         benchmarks='s'#heat-3d'#,fdtd-2d,state_frag'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
     ):
     benchmark_names = benchmarks
