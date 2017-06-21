@@ -34,7 +34,7 @@ dictionary = {
         }
     },
     'deriche': {
-        'e': 'a*i + c*x + b*y + d*z',
+        'e': '(a*i) + (c*x) + (b*y) + (d*z)',
         'v': {
             'a': [0, 1],
             'i': [0, 1],

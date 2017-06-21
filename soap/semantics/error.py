@@ -29,7 +29,8 @@ def _unpack(v):
 
 
 def _ulp(v):
-    """Computes the unit of the last place for a value.
+    """[Previous implementation]
+    Computes the unit of the last place for a value.
 
     :param v: The value.
     :type v: any gmpy2 values

@@ -2,7 +2,7 @@ from tests.benchmarks.polybench import dictionary as polybench_dict
 from tests.benchmarks.livermore import dictionary as livermore_dict
 
 class BenchmarkExpr(object):
-    """docstring for BenchmarkExpr"""
+    """Objects of BenchmarkExpr hold the relevant data about a particular benchmark expression."""
     def __init__(self, e, v, max_transformation_depth=None, *args, **kwargs):
         super(BenchmarkExpr, self).__init__()
         self.e = e
@@ -24,8 +24,9 @@ class BenchmarkExpr(object):
     e_and_v = expr_and_vars
 
     def __repr__(self):
-        return '{cls}(e={e}, v={v}, name={name})'.format(
-            cls=self.__class__.__name__, e=repr(self.e), v=self.v, name=repr(self.name))
+        return '{cls}(e={e}, v={v}, name={name}, max_transformation_depth={mtd})'.format(
+            cls=self.__class__.__name__, e=repr(self.e), v=self.v, name=repr(self.name),
+            mtd=max_transformation_depth)
 
     __str__ = __repr__
         

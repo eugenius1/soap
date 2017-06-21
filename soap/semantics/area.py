@@ -64,7 +64,7 @@ class AreaSemantics(Comparable, Lattice):
         # + 1 for MSB's (potentially) due to 2's complement
         MaxMSB_in = max(a_mul_b_exp_bounds.max, c_exp_bounds.max) + 2
         LSB_acc = min(a_mul_b_exp_bounds.min, c_exp_bounds.min) - self.p
-        MSB_acc = fma_exp_bounds.max + 2
+        MSB_acc = max(fma_exp_bounds.max + 2, MaxMSB_in)
         
         return LongAccParams(MaxMSB_in=MaxMSB_in, LSB_acc=LSB_acc, MSB_acc=MSB_acc)
 

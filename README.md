@@ -25,12 +25,14 @@ Instructions are given for Ubuntu and are expected to work for other major Linux
 pip3 install -r requirements.txt
 ```
 
-- Install gmpy3 outside of pip:
+- Install gmpy2 outside of pip:
 ```bash
 sudo apt-get install python3-gmpy2
 ```
 
 ### Optional
+
+Optionally, in order to allow fetching of area information beyond that already stored (the included cache is sufficient for the default benchmark parameters):
 
 - Install [FloPoCo 2.5.0](http://flopoco.gforge.inria.fr/flopoco_installation.html)
 - Install [ISE Design Suite](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/design-tools.html) (version 14.7; needs a license file)
@@ -56,4 +58,4 @@ The function call `run()` at the end of tests/fused/analysis.py can take keyword
 
 
 Defaults are to run the benchmark expressions available (a subset from PolyBench and Livermore Loops) at single-precision, and varying the precision of the frontiers.
-Area dynamic cache is used by default and full closure is perfomed with a maximum transormation depth of 1000.
+Area dynamic cache is used by default and full closure is performed with a maximum transformation depth of 1000.
