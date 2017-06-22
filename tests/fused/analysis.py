@@ -47,15 +47,16 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_transformation_depth=False,
+def run(timing=True, vary_transformation_depth=False, alert_finish=False,
         vary_precision=False, vary_precision_one_frontier=True,
         precision_step=1, precision_start=23, precision_end=52,
         use_area_cache=True, annotate=False,
-        transformation_depth=1000,
+        transformation_depth=3,
         expand_singular_frontiers=True, expand_all_frontiers=False,
         precision='s', logging='w', annotate_size=14,
-        algorithm='c', compare_with_soap3=False, fma_wf_factor=1,
-        benchmarks='s'#heat-3d'#,fdtd-2d,state_frag'#,syrk,2d_hydro,syr2k'#fdtd_1',#_taylor_b,2d_hydro,seidel,fdtd_1'
+        algorithm='c', compare_with_soap3=False,
+        fma_wf_factor=None, single_use_fma=0,
+        benchmarks='heat-3d'
     ):
     benchmark_names = benchmarks
 
@@ -64,6 +65,7 @@ def run(timing=True, vary_transformation_depth=False,
     from pprint import pprint
     
     import soap.logger as logger
+    import soap.common
     from soap.common import invalidate_cache
     from soap.analysis import Plot
     from soap.analysis.utils import plot, analyse, analyse_and_frontier
@@ -78,14 +80,21 @@ def run(timing=True, vary_transformation_depth=False,
         Add3TreeTransformer, ConstMultTreeTransformer, FMATreeTransformer,
     )
 
-    from tests.benchmarks import number_in_benchmark_suites, get_by_name as get_benchmarks
-    from tests.fused.analysis import improvements, mins_of_analysis
+    from tests.benchmarks import (
+        soap3_results, number_in_benchmark_suites, get_by_name as get_benchmarks
+    )
     
-    Expr.__repr__ = Expr.__str__
+    # Set logging level
     logging = {'o': 'off', 'e': 'error', 'w': 'warning', 'i': 'info', 'd': 'debug'
         }.get(logging, logging)
     logger.set_context(level=getattr(logger.levels, logging, logger.levels.warning))
+    
+    Expr.__repr__ = Expr.__str__
+
+    # Set SOAP parameters
+    soap.common.fma_is_single_use = single_use_fma
     flopoco.use_area_dynamic_cache = use_area_cache
+    flopoco.fma_includes_conversion_to_fp = True
     flopoco.fma_wf_factor = fma_wf_factor
 
     # wf excludes the leading 1 in the mantissa/significand
@@ -109,8 +118,6 @@ def run(timing=True, vary_transformation_depth=False,
             precision_end + 1,
             precision_step)
         )
-
-    v = {'a': ['1', '2'], 'b': ['100', '200'], 'c': ['0.1', '0.2']}
 
     if not vary_transformation_depth:
         actions = (
@@ -140,7 +147,7 @@ def run(timing=True, vary_transformation_depth=False,
     if algorithm not in ('a', 'all'):
         if algorithm not in traces.keys():
             algorithm = {'f': 'frontier', 'gf': 'greedy_frontier', 'fg': 'greedy_frontier', 'g': 'greedy', 'c': 'closure',
-                }.get(algorithm, 'greedy_frontier')
+                }.get(algorithm, 'closure')
         traces = {algorithm: traces[algorithm]}
 
     line_styles = ['dashed', 'dashdot', 'dotted', 'solid']
@@ -349,107 +356,23 @@ def run(timing=True, vary_transformation_depth=False,
     else:
         logger.error('No transformer comparison made.')
 
-    print('\n', dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks),
+    print()
+    pprint(dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks),
         transformation_depth=transformation_depth, use_area_cache=use_area_cache,
-        traces=list(traces.keys()), fma_wf_factor=fma_wf_factor,
+        algorithm=list(traces.keys()),
+        fma_wf_factor=fma_wf_factor, single_use_fma=single_use_fma,
     ))
 
     if fused_failures:
         logger.error('Missing points in fused frontier of', fused_failures)
 
-    if len(benchmarks) >= number_in_benchmark_suites:
+    if alert_finish and len(benchmarks) >= number_in_benchmark_suites:
         import subprocess
         subprocess.call(['speech-dispatcher'])        #start speech dispatcher
         subprocess.call(['spd-say', '"yo"'])
 
     input('\nPress Enter to continue...')
 
-
-soap3_results = {
-    'seidel': {
-        'analysis_duration': 2.2875101566314697,
-        'original': {
-            'area': 411,
-            'error': 2.175569875362271e-07,
-            'expression': '((((a + b) + c) + d) + e) * 0.2'
-        },
-        'analysis': [
-            {
-                'area': 1058,
-                'error': 1.7136335372924805e-07,
-                'expression': '(((d * 0.2) + (a * 0.2)) + ((c * 0.2) + (e * 0.2))) + (b * 0.2)'
-            },
-            {
-                'area': 544,
-                'error': 2.0712616333184997e-07,
-                'expression': '((((a + c) + d) + b) * 0.2) + (e * 0.2)'
-            },
-            {
-                'area': 411,
-                'error': 2.175569875362271e-07,
-                'expression': '((((a + c) + b) + d) + e) * 0.2'
-            },
-            {
-                'area': 649,
-                'error': 1.9371512394172896e-07,
-                'expression': '((c + e) + ((b + d) + a)) * 0.2'
-            },
-            {
-                'area': 554,
-                'error': 1.8179417793362518e-07,
-                'expression': '((a + (c + e)) * 0.2) + ((d * 0.2) + (b * 0.2))'
-            },
-            {
-                'area': 564,
-                'error': 1.8030405612989853e-07,
-                'expression': '((c + e) * 0.2) + (((d * 0.2) + (a * 0.2)) + (b * 0.2))'
-            },
-            {
-                'area': 935,
-                'error': 1.7136336794010276e-07,
-                'expression': '((c * 0.2) + (e * 0.2)) + (((d * 0.2) + (b * 0.2)) + (a * 0.2))'
-            }
-        ],
-        'vary_precision': [
-            {
-                'area': 411,
-                'error': 2.175569875362271e-07,
-                'expression': '((((a + b) + c) + d) + e) * 0.2'
-            },
-        ],
-        'loop': {
-            'original': {
-                'area': 603,
-                'error': 1.0681659659894649e-05,
-            },
-            'analysis': {
-            },
-            'vary_precision': [
-                # all areas come out the same unless Virtex6 luts are used
-                { # 21
-                    'area': 603, # 3303
-                    'error': 4.272656224202365e-05,
-                },
-                { # 22
-                    'area': 603, # 3417
-                    'error': 2.282651257701218e-05,
-                },
-                { # 23
-                    'area': 603, # 3518
-                    'error': 1.0681659659894649e-05,
-                },
-                { # 24
-                    'area': 603, # 3707
-                    'error': 5.706639285563142e-06,
-                },
-                { # 25
-                    'area': 603, # 3785
-                    'error': 2.6704132096710964e-06,
-                },
-            ],
-        }
-    }
-}
 
 if __name__ == '__main__':
     run()

@@ -10,6 +10,7 @@ from matplotlib import rc, pyplot, pylab
 
 import soap.expr
 import soap.logger as logger
+import soap.common
 from soap.common import Comparable
 from soap.semantics import Lattice, flopoco, error_for_operand
 from soap.expr import (
@@ -63,7 +64,10 @@ class AreaSemantics(Comparable, Lattice):
 
         # + 1 for MSB's (potentially) due to 2's complement
         MaxMSB_in = max(a_mul_b_exp_bounds.max, c_exp_bounds.max) + 2
-        LSB_acc = min(a_mul_b_exp_bounds.min, c_exp_bounds.min) - self.p
+        if soap.common.fma_is_single_use:
+            LSB_acc = max(a_mul_b_exp_bounds.min, c_exp_bounds.min) - self.p -1
+        else:
+            LSB_acc = min(a_mul_b_exp_bounds.min, c_exp_bounds.min) - self.p
         MSB_acc = max(fma_exp_bounds.max + 2, MaxMSB_in)
         
         return LongAccParams(MaxMSB_in=MaxMSB_in, LSB_acc=LSB_acc, MSB_acc=MSB_acc)

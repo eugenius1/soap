@@ -10,6 +10,10 @@ import soap.logger as logger
 
 from soap.logger import print_return
 
+
+fma_is_single_use = False
+
+
 class DynamicMethods(object):
 
     @classmethod

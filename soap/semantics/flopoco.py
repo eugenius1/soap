@@ -4,6 +4,7 @@ import tempfile
 import functools
 from contextlib import contextmanager
 
+import soap.common
 from soap.common import cached, timeit
 import soap.logger as logger
 from soap.expr.common import (
@@ -62,7 +63,7 @@ flopoco_op_mapping = {
         ADD3_OP: 'FPAdd3Input',
         CONSTANT_MULTIPLY_OP: 'FPConstMult',
         F_DotProduct: 'FPDotProduct',
-        F_LongAcc: 'FPLargeAcc', # currently broken
+        F_LongAcc: 'FPLargeAcc', # currently broken in this version
         F_LongAcc2FP: 'LargeAccToFP',
     }
 }
@@ -401,14 +402,18 @@ def luts_for_op(op, we=None, wf=None, **kwargs):
                 LSB_acc=LSB_acc,
                 MSB_acc=MSB_acc)
             ).get('value')
-        if fma_includes_conversion_to_fp:
-            luts += eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc2FP],
+        logger.debug('DotProduct:', luts)
+        if fma_includes_conversion_to_fp or soap.common.fma_is_single_use:
+            luts_converter = eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc2FP],
                 op_params=dict(
                     LSB_acc=LSB_acc, 
                     MSB_acc=MSB_acc,
                     we=we,
                     wf=wf)
                 ).get('value')
+            luts += luts_converter
+            logger.debug('Converter:', luts_converter)
+
     # ops that only run one flopoco command
     elif op in (ADD_OP, MULTIPLY_OP, ADD3_OP, CONSTANT_MULTIPLY_OP):
         return eval_operator(flopoco_op_mapping[flopoco_version][op],

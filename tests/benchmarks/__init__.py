@@ -1,5 +1,6 @@
 from tests.benchmarks.polybench import dictionary as polybench_dict
 from tests.benchmarks.livermore import dictionary as livermore_dict
+from tests.benchmarks.soap3_results import soap3_results
 
 class BenchmarkExpr(object):
     """Objects of BenchmarkExpr hold the relevant data about a particular benchmark expression."""
