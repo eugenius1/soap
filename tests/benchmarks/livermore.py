@@ -28,7 +28,7 @@ dictionary = {
 #     }
 
 	'state_frag': {
-        'max_transformation_depth': 4,
+        'max_transformation_depth': 3,
         'e': '''u + r*( z + r*y ) +
            t*( a + r*( b + r*c) +
               t*( d + r*( e + r*f ) ) )''',

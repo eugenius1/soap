@@ -36,7 +36,7 @@ flopoco_version = flopoco_2_5_0
 flopoco_generate_figures = False
 
 use_area_dynamic_cache = True
-fma_includes_conversion_to_fp = False
+fma_includes_conversion_to_fp = True
 fma_wf_factor = None
 
 # SOAP-internal representations of flopoco operators
@@ -79,8 +79,9 @@ flopoco_args_mapping = {
         'FPConstMult': ('{we}', '{wf}', '{we}', '{wf}', '{wc}', '{constant}'),
         # wE wFX wFY MaxMSB_in LSB_acc MSB_acc DSPThreshold
         'DotProduct': ('{we}', '{wf}', '{wf}', '{MaxMSB_in}', '{LSB_acc}', '{MSB_acc}', '{DSPThreshold}'),
-        # wE_in wF_in MaxMSB_in LSB_acc MSB_acc
-        'LongAcc': ('{we}', '{wf}', '{MaxMSB_in}', '{LSB_acc}', '{MSB_acc}'),
+        # # wE_in wF_in MaxMSB_in LSB_acc MSB_acc
+        # already included in DotProduct
+        # 'LongAcc': ('{we}', '{wf}', '{MaxMSB_in}', '{LSB_acc}', '{MSB_acc}'),
         # LSB_acc MSB_acc wE_out wF_out
         'LongAcc2FP': ('{LSB_acc}', '{MSB_acc}', '{we}', '{wf}'),
     },

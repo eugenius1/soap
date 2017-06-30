@@ -47,16 +47,36 @@ def is_better_frontier_than(first, second):
     return (not better_second), better_first, better_second
 
 
-def run(timing=True, vary_transformation_depth=False, alert_finish=False,
-        vary_precision=False, vary_precision_one_frontier=True,
-        precision_step=1, precision_start=23, precision_end=52,
-        use_area_cache=True, annotate=False,
-        transformation_depth=3,
-        expand_singular_frontiers=True, expand_all_frontiers=False,
-        precision='s', logging='w', annotate_size=14,
-        algorithm='c', compare_with_soap3=False,
-        fma_wf_factor=None, single_use_fma=0,
-        benchmarks='heat-3d'
+def run(# Default parameters. Override in the call at the end of the file
+        logging='warning',
+        benchmarks='suites',
+        precision='single',
+        algorithm='closure',
+
+        use_area_cache=True, # area_dynamic.pkl
+        timing=True, # invalidate internal cache or not (not including the area caches)
+        alert_finish=False, # Ubuntu only
+        
+        # Multiple precisions
+        vary_precision=False,
+        vary_precision_one_frontier=True, # show one frontier
+        precision_step=1, precision_start=22, precision_end=53,
+
+        # FMA
+        fma_wf_factor=None,
+        single_use_fma=False,
+
+        # Transformation depth
+        vary_transformation_depth=False,
+        transformation_depth=100,
+        
+        # Plotting
+        annotate=False,
+        annotate_size=14,
+        expand_singular_frontiers=True,
+        expand_all_frontiers=False,
+
+        compare_with_soap3=False, # only for seidel at single precision
     ):
     benchmark_names = benchmarks
 
@@ -85,7 +105,7 @@ def run(timing=True, vary_transformation_depth=False, alert_finish=False,
     )
     
     # Set logging level
-    logging = {'o': 'off', 'e': 'error', 'w': 'warning', 'i': 'info', 'd': 'debug'
+    logging = {'o': 'off', 'e': 'error', 'w': 'warning', 'i': 'info', 'd': 'debug', 'v': 'debug'
         }.get(logging, logging)
     logger.set_context(level=getattr(logger.levels, logging, logger.levels.warning))
     
@@ -118,6 +138,7 @@ def run(timing=True, vary_transformation_depth=False, alert_finish=False,
             precision_end + 1,
             precision_step)
         )
+        timing = False
 
     if not vary_transformation_depth:
         actions = (
@@ -255,7 +276,7 @@ def run(timing=True, vary_transformation_depth=False, alert_finish=False,
                     if transformer_index == 0:
                         original_frontier = frontier
                         original_duration = duration
-                        original_mins = mins_of_analysis(frontier)
+                        original_mins = mins_of_analysis(original_frontier)
                     else:
                         imp_dict = improvements(original_mins, mins_of_analysis(frontier),
                             original_duration, duration)
@@ -292,9 +313,18 @@ def run(timing=True, vary_transformation_depth=False, alert_finish=False,
                             p.add(results_vp,
                                 linestyle=linestyle,
                                 color_group=label,
+                                annotate=annotate,
                                 **legend_kwarg,
                                 **analysis_kwargs,
                             )
+                            # Analyse the frontier for improvements
+                            if index_fr == 0:
+                                original_frontier = results_vp
+                                original_mins = mins_of_analysis(original_frontier)
+                            else:
+                                imp_dict = improvements(original_mins, mins_of_analysis(frontier))
+                                transformer_results.append([
+                                    Transformer.__name__, benchmark_name, imp_dict, algorithm])
                         else:
                             for index_epf, expr in enumerate(frontier_expressions):
                                 p.add_analysis(expr,
@@ -328,7 +358,7 @@ def run(timing=True, vary_transformation_depth=False, alert_finish=False,
     logger.warning(transformer_results)
 
     if transformer_results:
-        # a visual indicator to not claim these results as from the benchmark suites
+        # a visual reminder to not claim these results as from the benchmark suites
         if len(benchmarks) > number_in_benchmark_suites:
             print_func = logger.error
         else:
@@ -337,12 +367,14 @@ def run(timing=True, vary_transformation_depth=False, alert_finish=False,
         best_area_improvement = max(transformer_results, key=lambda p:p[2]['scaling'].area)
         best_error_improvement = max(transformer_results, key=lambda p:p[2]['scaling'].error)
         worst_area_cost_of_error = max(transformer_results, key=lambda p:p[2]['cost_of_error'])
-        worst_duration_increase = max(transformer_results, key=lambda p:p[2]['duration']['scaling'])
         
         pprint(best_area_improvement)
         pprint(best_error_improvement)
         pprint(worst_area_cost_of_error)
-        pprint(worst_duration_increase)
+        if timing:
+            worst_duration_increase = max(transformer_results, key=lambda p:p[2]['duration']['scaling'])
+            pprint(worst_duration_increase)
+
         print()
         print_func('best area improvement: {} (error improved by {})'.format(
             best_area_improvement[2]['scaling'].area, best_area_improvement[2]['scaling'].error))
@@ -357,19 +389,19 @@ def run(timing=True, vary_transformation_depth=False, alert_finish=False,
         logger.error('No transformer comparison made.')
 
     print()
-    pprint(dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks),
-        transformation_depth=transformation_depth, use_area_cache=use_area_cache,
+    pprint(dict(precision=precision, timing=bool(timing), number_of_benchmarks=len(benchmarks),
+        transformation_depth=transformation_depth, use_area_cache=bool(use_area_cache),
         algorithm=list(traces.keys()),
-        fma_wf_factor=fma_wf_factor, single_use_fma=single_use_fma,
+        fma_wf_factor=fma_wf_factor, single_use_fma=bool(single_use_fma),
     ))
 
     if fused_failures:
         logger.error('Missing points in fused frontier of', fused_failures)
 
-    if alert_finish and len(benchmarks) >= number_in_benchmark_suites:
+    if alert_finish:# and len(benchmarks) >= number_in_benchmark_suites:
         import subprocess
         subprocess.call(['speech-dispatcher'])        #start speech dispatcher
-        subprocess.call(['spd-say', '"yo"'])
+        subprocess.call(['spd-say', '"All done!"'])
 
     input('\nPress Enter to continue...')
 
