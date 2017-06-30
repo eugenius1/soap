@@ -54,8 +54,49 @@ PYTHONPATH=. python3 tests/fused/analysis.py
 
 ### Parameters
 
-The function call `run()` at the end of tests/fused/analysis.py can take keyword arguments, as follows:
+The function call `run()` at the end of `tests/fused/analysis.py` can take keyword arguments, as shown below.
 
+Defaults are to run the benchmark expressions available (a subset from PolyBench and Livermore Loops) at single-precision.
+Area dynamic cache is used by default and full closure is performed with a maximum transformation depth of 100.
+The multiple-use FMA type is default and singular frontiers are expanded when plotted.
 
-Defaults are to run the benchmark expressions available (a subset from PolyBench and Livermore Loops) at single-precision, and varying the precision of the frontiers.
-Area dynamic cache is used by default and full closure is performed with a maximum transformation depth of 1000.
+```python
+logging='warning',
+# ('o'|'off') | ('e'|'error') | ('w'|'warning') | ('i'|'info') | ('v'|'d'|'debug')
+benchmarks='suites',
+# comma-separated list of the names or ('a'|'all') | ('s'|'suite'|'suites')
+precision='single',
+# wF integer or ('h'|'half') | ('s'|'single') | ('d'|'double') | ('q'|'quad'|'quadruple)
+algorithm='closure',
+# ('f'|'frontier') | ('gf'|'fg'|'greedy_frontier') | ('g'|'greedy') | ('c'|'closure')
+
+use_area_cache=True, # area_dynamic.pkl
+timing=True, # invalidate internal cache or not (not including the area caches)
+alert_finish=False, # Ubuntu only
+
+# Multiple precisions
+vary_precision=False,
+vary_precision_one_frontier=True, # show one frontier
+precision_step=1, precision_start=22, precision_end=53,
+# range(precision_start, precision_end + 1, precision_step)
+
+# Fused Multiply-Add (FMA)
+# fma_wf_factor overrides LSB_acc (LSBA) set by single_use_fma
+fma_wf_factor=None,
+# LSB_acc = MSB_acc - int(fma_wf_factor * wf) - 1
+single_use_fma=False, # 
+# True: LSB_acc = max(a_mul_b_exp_bounds.min, c_exp_bounds.min) - wF -1
+# False: LSB_acc = min(a_mul_b_exp_bounds.min, c_exp_bounds.min) - wF
+
+# Transformation depth
+vary_transformation_depth=False, # 1 to 6
+transformation_depth=100,
+
+# Plotting
+annotate=False,
+annotate_size=14,
+expand_singular_frontiers=True,
+expand_all_frontiers=False,
+
+compare_with_soap3=False, # only for `seidel` at single precision
+```

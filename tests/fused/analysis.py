@@ -128,7 +128,7 @@ def run(# Default parameters. Override in the call at the end of the file
     try:
         precision = int(precision)
     except (TypeError, ValueError):
-        precision = {'h': 'half', 's': 'single', 'd': 'double', 'q': 'quad'
+        precision = {'h': 'half', 's': 'single', 'd': 'double', 'q': 'quad', 'quadruple': 'quad'
             }.get(precision, precision)
         precision = standard_precs.get(precision, standard_precs['single'])
 
@@ -389,10 +389,10 @@ def run(# Default parameters. Override in the call at the end of the file
         logger.error('No transformer comparison made.')
 
     print()
-    pprint(dict(precision=precision, timing=bool(timing), number_of_benchmarks=len(benchmarks),
-        transformation_depth=transformation_depth, use_area_cache=bool(use_area_cache),
+    pprint(dict(precision=precision, timing=timing, number_of_benchmarks=len(benchmarks),
+        transformation_depth=transformation_depth, use_area_cache=use_area_cache,
         algorithm=list(traces.keys()),
-        fma_wf_factor=fma_wf_factor, single_use_fma=bool(single_use_fma),
+        fma_wf_factor=fma_wf_factor, single_use_fma=single_use_fma,
     ))
 
     if fused_failures:

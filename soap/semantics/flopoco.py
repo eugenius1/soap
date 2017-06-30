@@ -404,7 +404,7 @@ def luts_for_op(op, we=None, wf=None, **kwargs):
                 MSB_acc=MSB_acc)
             ).get('value')
         logger.debug('DotProduct:', luts)
-        if fma_includes_conversion_to_fp or soap.common.fma_is_single_use:
+        if fma_includes_conversion_to_fp:
             luts_converter = eval_operator(flopoco_op_mapping[flopoco_version][F_LongAcc2FP],
                 op_params=dict(
                     LSB_acc=LSB_acc, 
